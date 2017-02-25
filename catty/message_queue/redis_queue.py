@@ -83,7 +83,7 @@ class RedisPriorityQueue(BaseQueue):
             raise self.Full
         # umsgpack用于序列化数据
         # TODO 每个obj必须有一个priority属性
-        priority = get_default(obj, 'priority', 0)
+        priority = -get_default(obj, 'priority', 0)
         self.redis.execute_command('ZADD', self.name, priority, pickle.dumps(obj))
         return True
 

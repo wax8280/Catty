@@ -16,26 +16,31 @@ import pickle
         'url': str,
         'status': int,
         'meta': str,
+        'priority': int,
+
         'fetcher': {
             'method': str,
             'date': str or dict
             'headers': str,
             'timeout': int,
         },
+
         'scheduler': {
             'exetime': int,
-            'priority': int,
         },
+
         'parser': {
             'parser_return': dict
         },
+
         'response': {
             'response_obj': Response,
             'status': int,
             'status_code': int,
         }
+
         'callbacks': list,      # bound method
-        'items': dict,          # the dict return from paser func
+        'item': dict,          # the dict return from paser func
     }
 
 status :    0        NOTSTART

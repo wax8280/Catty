@@ -18,13 +18,12 @@ class Test(unittest.TestCase):
         self.queue.put_nowait({'test': 'testing1', 'priority': 0})
         self.queue.put_nowait({'test': 'testing2', 'priority': 1})
         self.queue.put_nowait({'test': 'testing3', 'priority': 2})
-
         self.assertEqual(
                 self.queue.redis.zrange('MySpider:parser_scheduler', 0, -1),
                 [
-                    b'\x80\x03}q\x00(X\x04\x00\x00\x00testq\x01X\x08\x00\x00\x00testing1q\x02X\x08\x00\x00\x00priorityq\x03K\x00u.',
+                    b'\x80\x03}q\x00(X\x04\x00\x00\x00testq\x01X\x08\x00\x00\x00testing3q\x02X\x08\x00\x00\x00priorityq\x03K\x02u.',
                     b'\x80\x03}q\x00(X\x04\x00\x00\x00testq\x01X\x08\x00\x00\x00testing2q\x02X\x08\x00\x00\x00priorityq\x03K\x01u.',
-                    b'\x80\x03}q\x00(X\x04\x00\x00\x00testq\x01X\x08\x00\x00\x00testing3q\x02X\x08\x00\x00\x00priorityq\x03K\x02u.']
+                    b'\x80\x03}q\x00(X\x04\x00\x00\x00testq\x01X\x08\x00\x00\x00testing1q\x02X\x08\x00\x00\x00priorityq\x03K\x00u.']
         )
 
         self.queue.redis.flushdb()
@@ -40,7 +39,7 @@ class Test(unittest.TestCase):
 
         self.assertEqual(
                 self.queue.get_nowait(),
-                {'test': 'testing1', 'priority': 0}
+                {'test': 'testing3', 'priority': 2}
         )
         self.assertEqual(
                 self.queue.get_nowait(),
@@ -48,7 +47,7 @@ class Test(unittest.TestCase):
         )
         self.assertEqual(
                 self.queue.get_nowait(),
-                {'test': 'testing3', 'priority': 2}
+                {'test': 'testing1', 'priority': 0}
         )
 
         self.assertEqual(

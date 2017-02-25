@@ -14,8 +14,15 @@ from catty.scheduler.tasker import Tasker
 
 class Scheduler(object):
     LOAD_SPIDER_INTERVAL = 1
-    # [{'spdier_name':spdier_ins}]
-    SPIDER_INS = []
+    # [
+    #   {
+    #       'spider': spdier_ins,
+    #       'name': spider_name
+    #       'status': int,   # 0 not_start 1 start
+    #   }
+    # ]
+    SPIDERS = []
+    COUNT_PRE_LOOP = 30
 
     def __init__(self,
                  scheduler_downloader_queue: RedisPriorityQueue,
@@ -25,7 +32,7 @@ class Scheduler(object):
 
         self._stop = False
         self._task_from_parser = []
-        self._count_pre_loop = 30
+        self._count_pre_loop = self.COUNT_PRE_LOOP
         self._task_to_downloader = []
         self._selected_task = []
 
@@ -35,7 +42,15 @@ class Scheduler(object):
         """load script from db"""
         pass
 
-    def _load_item(self):
+    def instantiate_spdier(self, spider_class, spider_name, status=0):
+        """instantiate the spdier"""
+        self.SPIDERS.append({
+            'spider': spider_class(),
+            'name': spider_name,
+            'status': status
+        })
+
+    def _get_item_from_parser_scheduler_queue(self):
         """load item from parser-scheduler queue"""
         return self.parser_scheduler_queue.get_nowait()
 
@@ -45,7 +60,7 @@ class Scheduler(object):
             _c_ += 1
             try:
                 self._task_from_parser.append(
-                        self._load_item()
+                        self._get_item_from_parser_scheduler_queue()
                 )
             except:
                 traceback.print_exc()
@@ -69,13 +84,12 @@ class Scheduler(object):
             if time.time() - each_task['exetime'] > 0:
                 self._selected_task.append(each_task)
 
-    def unpack_items(self, item):
-        """unpack items"""
-        pass
-
-    def _make_task(self, func, items):
+    def _make_task(self, func, items=None):
         """run the spider_ins boned method to return a task,and append it to self._task"""
-        task = func(items=items)
+        if items:
+            task = func(items=items)
+        else:
+            task = func()
         self._task_to_downloader.append(task)
 
     def make_tasks(self):
@@ -84,20 +98,24 @@ class Scheduler(object):
         while self._task_from_parser and _c_ < self._count_pre_loop:
             _c_ += 1
             task = self._task_from_parser.pop()
-            for callback in task['callbacks']:
-                parser_func = callback.get('parser', None)
-                fetcher_func = callback.get('fetcher', None)
-                result_pipeline_func = callback.get('result_pipeline', None)
-                # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
-                try:
-                    self._make_task(fetcher_func, task['items'])
-                except:
-                    traceback.print_exc()
-                    pass
+            callback=task['callbacks']
+            parser_func = callback.get('parser', None)
+            fetcher_func = callback.get('fetcher', None)
+            result_pipeline_func = callback.get('result_pipeline', None)
+            # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
+            try:
+                self._make_task(fetcher_func, task['item'])
+            except:
+                traceback.print_exc()
+                pass
 
     def make_task_from_start(self):
         """run spdier_ins start method when a new spdier start"""
-        pass
+        for spider_item in self.SPIDERS:
+            # status 0 means not start
+            if spider_item['status'] == 0:
+                # start the spider's start method
+                self._make_task(spider_item['spider'].start)
 
     def run(self):
         pass

@@ -10,5 +10,6 @@ class BaseSpider(object):
     def request(self, **kwargs):
         _d = {'spider_name': self.name}
         _d.update(kwargs)
+        if 'priority' not in _d.keys():
+            _d.update({'priority': 0})
         return _d
-

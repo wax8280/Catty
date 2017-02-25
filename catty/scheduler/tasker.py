@@ -34,7 +34,8 @@ import pickle
             'status': int,
             'status_code': int,
         }
-        'callbacks': str,
+        'callbacks': list,      # bound method
+        'items': dict,          # the dict return from paser func
     }
 
 status :    0        NOTSTART

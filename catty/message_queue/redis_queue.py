@@ -5,11 +5,13 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 9:53
 
+import pickle
 import queue
 import time
 
 import redis
-import umsgpack
+
+from catty.libs.utils import get_default
 
 
 class BaseQueue(object):
@@ -81,7 +83,8 @@ class RedisPriorityQueue(BaseQueue):
             raise self.Full
         # umsgpack用于序列化数据
         # TODO 每个obj必须有一个priority属性
-        self.redis.execute_command('ZADD', self.name, -obj.priority, umsgpack.packb(obj))
+        priority = get_default(obj, 'priority', 0)
+        self.redis.execute_command('ZADD', self.name, priority, pickle.dumps(obj))
         return True
 
     def put(self, obj, block=True, timeout=None):
@@ -108,9 +111,9 @@ class RedisPriorityQueue(BaseQueue):
         # 取出并删除最高优先级的元素
         pipe.zrange(self.name, 0, 0).zremrangebyrank(self.name, 0, 0)
         results, count = pipe.execute()
-        if results is None:
+        if not results:
             raise self.Empty
-        return umsgpack.unpackb(results)
+        return pickle.loads(results[0])
 
     def get(self, block=True, timeout=None):
         if not block:

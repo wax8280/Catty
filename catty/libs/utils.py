@@ -17,3 +17,20 @@ def utf8(string):
         return string
     else:
         return string.encode('utf8')
+
+
+def get_default(obj, name_or_index, default=''):
+    if name_or_index.isdigit():
+        try:
+            result = obj[name_or_index]
+        except:
+            result = default
+    else:
+        try:
+            result = obj[name_or_index]
+        except:
+            try:
+                result = obj.__getattribute__(name_or_index)
+            except:
+                result = default
+    return result

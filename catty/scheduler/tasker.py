@@ -13,16 +13,12 @@ import pickle
     'task': {
         'tid': str,
         'spider_name': str,
-        'url': str,
         'status': int,
-        'meta': str,
         'priority': int,
 
+
+        'request': Request_obj,
         'downloader': {
-            'method': str,
-            'date': str or dict
-            'headers': str,
-            'timeout': int,
         },
 
         'scheduler': {
@@ -30,7 +26,7 @@ import pickle
         },
 
         'parser': {
-            'parser_return': dict
+            'item': dict,          # the dict return from paser func
         },
 
         'response': {
@@ -40,7 +36,6 @@ import pickle
         }
 
         'callbacks': list,      # bound method
-        'item': dict,          # the dict return from paser func
     }
 
 status :    0        NOTSTART
@@ -50,12 +45,10 @@ status :    0        NOTSTART
 NOTSTART = 0
 
 NOW = 0
-from catty.libs.url import *
 from catty.libs.utils import *
 
 
 class Tasker(object):
-
     def _make_task(self, d):
         spider_name = d['spider_name']
         status = NOTSTART
@@ -64,24 +57,20 @@ class Tasker(object):
         priority = 0
         callbacks = d['callbacks']
 
-        tid = md5string(url + body)
+        tid = md5string(d['resuest']['url'] + d['request']['body'])
 
         t = {
             'tid': tid,
             'spdier_name': spider_name,
-            'url': url,
             'status': status,
-            'meta': meta,
-            'fetcher': {
-                'method': method,
-                'body': body,
-                'headers': headers,
-                'timeout': timeout,
-            },
+            'priority': priority,
+            'request': d['request'],
+            'downloader': {},
             'scheduler': {
                 'exetime': exetime,
-                'priority': priority,
             },
+            'parser': {},
+            'response': {},
             'callbacks': callbacks,
         }
 

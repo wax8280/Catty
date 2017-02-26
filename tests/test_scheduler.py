@@ -21,11 +21,14 @@ class Test(unittest.TestCase):
                 self.parser_scheduler_queue,
         )
 
+    def tearDown(self):
+        self.scheduler_downloader_queue.clear()
+        self.parser_scheduler_queue.clear()
+
     def test_spider_start_method(self):
         from catty.demo.spider import MySpider
         self.scheduler.instantiate_spdier(spider_class=MySpider, spider_name='MySpider')
         self.scheduler.make_task_from_start()
-
 
         self.assertIn(
                 "'spider_name': 'MySpider'",
@@ -50,8 +53,8 @@ class Test(unittest.TestCase):
         print(self.scheduler._task_to_downloader)
 
         self.assertIn(
-            "'url': '....'",
-            str(self.scheduler._task_to_downloader[0]),
+                "'url': '....'",
+                str(self.scheduler._task_to_downloader[0]),
         )
 
     def test_load_item(self):

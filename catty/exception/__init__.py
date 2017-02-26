@@ -3,10 +3,8 @@
 # vim: set et sw=4 ts=4 sts=4 ff=unix fenc=utf8:
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
-# Created on 2017/2/24 14:29
-from catty.exception import Retry_current_task
+# Created on 2017/2/26 18:37
 
-class BaseParser(object):
-
-    def retry_current_task(self):
-        raise Retry_current_task
+class Retry_current_task(Exception):
+    def __str__(self):
+        return "Retry current task."

@@ -7,6 +7,8 @@
 import traceback
 
 from catty.message_queue.redis_queue import RedisPriorityQueue
+from catty.libs.request import Request
+from catty.exception import *
 
 
 class Parser(object):
@@ -40,28 +42,35 @@ class Parser(object):
     def _run_ins_func(self, func, task):
         """run the spider_ins boned method to parser it and return a item,and append it to self._task"""
         _response=task['response']['response_obj']
-        item = func(_response, task=task)
+        parser_return = func(_response, task=task)
 
-
-        if isinstance(task, dict):
-            self._task_to_downloader.append(task)
+        # if return a dict
+        if isinstance(parser_return, dict):
+            task['parser'].update({'item':parser_return})
+            pass
+        # if return a list of Request obj
+        elif isinstance(parser_return,Request):
+            pass
         elif isinstance(task, list):
-            for each_task in task:
-                self._task_to_downloader.append(each_task)
+            for each_request in parser_return:
+                if isinstance(parser_return,Request):
+                    pass
+
 
     def make_tasks(self):
-        """get old task from self._task_from_parser and make new task to append it to self._task"""
+        """get old task from self._task_from_downloader and make new task to append it to self._task_to_scheduler"""
         _c_ = 0
-        while self._task_from_parser and _c_ < self._count_pre_loop:
+        while self._task_from_downloader and _c_ < self._count_pre_loop:
             _c_ += 1
-            task = self._task_from_parser.pop()
+            task = self._task_from_downloader.pop()
             callback = task['callbacks']
             parser_func = callback.get('parser', None)
-            fetcher_func = callback.get('fetcher', None)
-            result_pipeline_func = callback.get('result_pipeline', None)
             # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
             try:
-                self._run_ins_func(fetcher_func, task['item'])
+                self._run_ins_func(parser_func, task)
+            except Retry_current_task:
+                # handle it like a new task
+                self._task_to_scheduler.append(task)
             except:
                 traceback.print_exc()
                 pass

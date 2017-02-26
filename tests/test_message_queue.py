@@ -14,6 +14,9 @@ class Test(unittest.TestCase):
         self.queue = RedisPriorityQueue(name='MySpider:parser_scheduler', db=0, maxsize=100)
         self.queue.clear()
 
+    def tearDown(self):
+        self.queue.clear()
+
     def test_put_nowait(self):
         self.queue.put_nowait({'test': 'testing1', 'priority': 0})
         self.queue.put_nowait({'test': 'testing2', 'priority': 1})

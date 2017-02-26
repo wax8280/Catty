@@ -14,6 +14,7 @@ from catty.scheduler.tasker import Tasker
 
 class Scheduler(object):
     LOAD_SPIDER_INTERVAL = 1
+    # schema
     # [
     #   {
     #       'spider': spdier_ins,
@@ -84,7 +85,7 @@ class Scheduler(object):
     def _select_task(self):
         """base on the exetime select the task to push"""
         for each_task in self._task_to_downloader:
-            if time.time() - each_task['exetime'] > 0:
+            if time.time() - each_task['scheduler']['exetime'] > 0:
                 self._selected_task.append(each_task)
 
     def _run_ins_func(self, func, items=None):
@@ -112,7 +113,7 @@ class Scheduler(object):
             result_pipeline_func = callback.get('result_pipeline', None)
             # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
             try:
-                self._run_ins_func(fetcher_func, task['item'])
+                self._run_ins_func(fetcher_func, task['parser']['item'])
             except:
                 traceback.print_exc()
                 pass

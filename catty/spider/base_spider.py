@@ -12,6 +12,7 @@ class BaseSpider(object):
         request = Request(**kwargs)
         _d = {
             'spider_name': self.name,
+            'callback': kwargs['callback'],
             'request': request,
         }
         if 'priority' not in _d.keys():

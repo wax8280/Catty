@@ -18,19 +18,26 @@ class Request(object):
         self.headers = kwargs.get('headers', DEFAULT_HEADERS)
         self.meta = kwargs.get('meta', '')
         # TODO build body
-        self.data = kwargs.get('data', '')
+        self.body = kwargs.get('data', '')
         self.timeout = kwargs.get('timeout', DEFAULT_TIMEOUT)
 
-    def __str__(self):
+    @staticmethod
+    def dump_request(request_obj):
         return {
-            'url': self.url,
-            'method': self.method,
-            'headers': self.headers,
-            'meta': self.meta,
-            'data': self.data,
-            'timeout': self.timeout,
+            'url': request_obj.url,
+            'method': request_obj.method,
+            'headers': request_obj.headers,
+            'meta': request_obj.meta,
+            'data': request_obj.data,
+            'timeout': request_obj.timeout,
         }
-
+    
+    @staticmethod
+    def load_request(d):
+        return Request(d)
+    
+    def __str__(self):
+        Request.dump_request(self)
 
 if __name__ == '__main__':
     r = Request(url='htt[://www.baidu.com/fxxk?start=10&end=20')

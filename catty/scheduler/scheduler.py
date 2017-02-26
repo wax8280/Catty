@@ -31,9 +31,11 @@ class Scheduler(object):
         self.parser_scheduler_queue = parser_scheduler_queue
 
         self._stop = False
-        self._task_from_parser = []
         self._count_pre_loop = self.COUNT_PRE_LOOP
+        self._task_from_parser = []
+        # _task_to_downloader:the task waiting for exetime
         self._task_to_downloader = []
+        # _selected_task:the task already after exetime
         self._selected_task = []
 
         self.tasker = Tasker()
@@ -55,6 +57,7 @@ class Scheduler(object):
         return self.parser_scheduler_queue.get_nowait()
 
     def load_item(self):
+        """load item from parser-scheduler queue in a loop,append it to self._task_from_parser"""
         _c_ = 0
         while not self.parser_scheduler_queue.empty() and _c_ < self._count_pre_loop:
             _c_ += 1
@@ -84,13 +87,18 @@ class Scheduler(object):
             if time.time() - each_task['exetime'] > 0:
                 self._selected_task.append(each_task)
 
-    def _make_task(self, func, items=None):
+    def _run_ins_func(self, func, items=None):
         """run the spider_ins boned method to return a task,and append it to self._task"""
         if items:
             task = func(items=items)
         else:
             task = func()
-        self._task_to_downloader.append(task)
+
+        if isinstance(task, dict):
+            self._task_to_downloader.append(task)
+        elif isinstance(task, list):
+            for each_task in task:
+                self._task_to_downloader.append(each_task)
 
     def make_tasks(self):
         """get old task from self._task_from_parser and make new task to append it to self._task"""
@@ -98,13 +106,13 @@ class Scheduler(object):
         while self._task_from_parser and _c_ < self._count_pre_loop:
             _c_ += 1
             task = self._task_from_parser.pop()
-            callback=task['callbacks']
+            callback = task['callbacks']
             parser_func = callback.get('parser', None)
             fetcher_func = callback.get('fetcher', None)
             result_pipeline_func = callback.get('result_pipeline', None)
             # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
             try:
-                self._make_task(fetcher_func, task['item'])
+                self._run_ins_func(fetcher_func, task['item'])
             except:
                 traceback.print_exc()
                 pass
@@ -115,7 +123,7 @@ class Scheduler(object):
             # status 0 means not start
             if spider_item['status'] == 0:
                 # start the spider's start method
-                self._make_task(spider_item['spider'].start)
+                self._run_ins_func(spider_item['spider'].start)
 
     def run(self):
         pass

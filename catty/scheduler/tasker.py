@@ -18,7 +18,7 @@ import pickle
         'meta': str,
         'priority': int,
 
-        'fetcher': {
+        'downloader': {
             'method': str,
             'date': str or dict
             'headers': str,

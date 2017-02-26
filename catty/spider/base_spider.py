@@ -4,12 +4,16 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 14:26
+from catty.libs.request import Request
 
 
 class BaseSpider(object):
     def request(self, **kwargs):
-        _d = {'spider_name': self.name}
-        _d.update(kwargs)
+        request = Request(**kwargs)
+        _d = {
+            'spider_name': self.name,
+            'request': request,
+        }
         if 'priority' not in _d.keys():
             _d.update({'priority': 0})
         return _d

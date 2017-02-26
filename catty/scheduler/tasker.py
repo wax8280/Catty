@@ -58,14 +58,7 @@ class Tasker(object):
 
     def _make_task(self, d):
         spider_name = d['spider_name']
-        url = format_url(d.get('url', ''))
         status = NOTSTART
-
-        method = d.get('method', 'GET')
-        body = format_body(d.get('data', ''))
-        headers = d.get('headers')
-        timeout = d.get('timeout', 30)
-        meta = d.get('meta', '')
 
         exetime = NOW
         priority = 0

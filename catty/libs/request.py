@@ -17,6 +17,7 @@ class Request(object):
         self.method = kwargs.get('method', 'GET')
         self.headers = kwargs.get('headers', DEFAULT_HEADERS)
         self.meta = kwargs.get('meta', '')
+        # TODO build body
         self.data = kwargs.get('data', '')
         self.timeout = kwargs.get('timeout', DEFAULT_TIMEOUT)
 

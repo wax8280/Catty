@@ -37,7 +37,7 @@ class Test(unittest.TestCase):
 
     def test_make_tasks(self):
         from catty.demo.spider import MySpider
-        self.scheduler.instantiate_spdier(spider_class=MySpider, spider_name='MySpider')
+        self.scheduler._instantiate_spdier(spider_class=MySpider, spider_name='MySpider')
         self.scheduler.make_task_from_start()
 
         # assume the task downloaded
@@ -62,7 +62,7 @@ class Test(unittest.TestCase):
         self.parser_scheduler_queue.put_nowait({'test2': 'testing2'})
         self.parser_scheduler_queue.put_nowait({'test3': 'testing3'})
 
-        self.scheduler.load_item()
+        self.scheduler.load_task_from_queue()
         self.assertEqual(
                 self.scheduler._task_from_parser,
                 [{'test1': 'testing1'}, {'test2': 'testing2'}, {'test3': 'testing3'}]
@@ -75,7 +75,7 @@ class Test(unittest.TestCase):
         self.parser_scheduler_queue.put_nowait({'test2': 'testing2', 'priority': 1})
         self.parser_scheduler_queue.put_nowait({'test3': 'testing3'})
 
-        self.scheduler.load_item()
+        self.scheduler.load_task_from_queue()
         self.assertEqual(
                 self.scheduler._task_from_parser,
                 [{'test2': 'testing2', 'priority': 1}]

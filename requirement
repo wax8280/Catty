@@ -1,2 +1,5 @@
 redis
-umsgpack
+requests
+aiohttp
+aiodns
+cchardet

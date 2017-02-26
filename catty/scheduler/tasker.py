@@ -43,6 +43,7 @@ status :    0        NOTSTART
 }
 """
 NOTSTART = 0
+STARTED = 1
 
 NOW = 0
 from catty.libs.utils import *
@@ -76,8 +77,8 @@ class Tasker(object):
 
         return t
 
-    def make(self, d):
-        return self._make_task(d)
+    def make(self, request):
+        return self._make_task(request)
 
     def dump_task(self, task):
         return pickle.dumps(task)

@@ -50,22 +50,22 @@ from catty.libs.utils import *
 
 
 class Tasker(object):
-    def _make_task(self, d):
-        spider_name = d['spider_name']
+    def _make_task(self, request):
+        spider_name = request['spider_name']
         status = NOTSTART
 
         exetime = NOW
         priority = 0
-        callbacks = d['callbacks']
+        callbacks = request['callbacks']
 
-        tid = md5string(d['resuest']['url'] + d['request']['body'])
+        tid = md5string(request['resuest']['url'] + request['request']['body'])
 
         t = {
             'tid': tid,
             'spdier_name': spider_name,
             'status': status,
             'priority': priority,
-            'request': d['request'],
+            'request': request['request'],
             'downloader': {},
             'scheduler': {
                 'exetime': exetime,

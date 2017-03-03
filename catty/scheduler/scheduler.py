@@ -59,7 +59,7 @@ class Scheduler(object):
         pass
 
     def _instantiate_spdier(self, spider_class, spider_name, status=0):
-        """instantiate the spdier"""
+        """instantiate the spider"""
         self.SPIDERS.append({
             'spider': spider_class(),
             'name': spider_name,
@@ -67,6 +67,7 @@ class Scheduler(object):
         })
 
     def instantiate_spdier(self):
+        """instantiate all spider which had loaded and not instantiated"""
         for spider in self.spdier_loaded:
             if spider['spider_name'] not in self.spider_insed:
                 self._instantiate_spdier(
@@ -74,20 +75,17 @@ class Scheduler(object):
                         spider['spider_name'],
                 )
 
+    def _select_task(self):
+        """base on the exetime select the task to push"""
+        for each_task in self._task_to_downloader:
+            if time.time() - each_task['scheduler']['exetime'] > 0:
+                self._selected_task.append(each_task)
+
     def _get_item_from_parser_scheduler_queue(self):
-        """load item from parser-scheduler queue"""
+        """get item from parser-scheduler queue"""
         return self.parser_scheduler_queue.get_nowait()
 
-    def load_task_from_queue(self):
-        """load item from parser-scheduler queue in a loop,append it to self._task_from_parser"""
-        try:
-            self._task_from_parser.append(
-                    self._get_item_from_parser_scheduler_queue()
-            )
-        except:
-            traceback.print_exc()
-
-    def _push_task(self):
+    def _push_task_to_scheduler_parser_queue(self):
         """push task to scheduler-downloader queue"""
         try:
             t = self._selected_task.pop()
@@ -101,17 +99,22 @@ class Scheduler(object):
             self._selected_task.append(t)
             # TODO log it
 
-    def _select_task(self):
-        """base on the exetime select the task to push"""
-        for each_task in self._task_to_downloader:
-            if time.time() - each_task['scheduler']['exetime'] > 0:
-                self._selected_task.append(each_task)
+    def load_task_from_queue(self):
+        """load item from parser-scheduler queue in a loop,append it to self._task_from_parser"""
+        try:
+            self._task_from_parser.append(
+                    self._get_item_from_parser_scheduler_queue()
+            )
+        except:
+            traceback.print_exc()
 
     def select_and_push_task(self):
+        """select the task which in up to exetime push task to scheduler-downloader queue in a loop"""
         self._select_task()
-        self._push_task()
+        self._push_task_to_scheduler_parser_queue()
 
     def _make_task_from_request(self, request):
+        """make the task from request and append it to self._task_to_downloader"""
         self._task_to_downloader.append(
                 self.tasker.make(request)
         )
@@ -130,7 +133,7 @@ class Scheduler(object):
                 self._make_task_from_request(each_request)
 
     def make_tasks(self):
-        """get old task from self._task_from_parser and make new task to append it to self._task"""
+        """get old task from self._task_from_parser and run ins func to  make new task to append it to self._task"""
         try:
             task = self._task_from_parser.pop()
         except IndexError:
@@ -141,17 +144,17 @@ class Scheduler(object):
         try:
             self._run_ins_func(fetcher_func, task['parser']['item'])
         except:
+            # TODO 这里捕获所有用户编写的spider里面的错误
             traceback.print_exc()
             pass
 
     def make_task_from_start(self):
-        """run spdier_ins start method when a new spdier start"""
-        for spider_item in self.SPIDERS:
-            # status 0 means not start
-            if spider_item['status'] == READY_TO_START:
+        """run spdier_ins start method when a new spider start"""
+        for spider_ins in self.SPIDERS:
+            if spider_ins['status'] == READY_TO_START:
                 # start the spider's start method
-                self._run_ins_func(spider_item['spider'].start)
-                spider_item['status'] = STARTED
+                self._run_ins_func(spider_ins['spider'].start)
+                spider_ins['status'] = STARTED
 
     def _stop_spider(self, spider_name):
         """stop the spider and persist the task"""
@@ -180,6 +183,8 @@ class Scheduler(object):
                and __c__ < self._count_pre_loop
                ):
             try:
+                # 接收控制信息->读取spider->实例化spider->运行新的spider的start方法->
+                # 从队列里读取parser发过来的task->运行函数并经过request生成新的task->等待执行时间到，将task放入队列
                 self.handle()
                 self.load_spider()
                 self.instantiate_spdier()

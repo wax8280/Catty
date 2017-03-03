@@ -11,9 +11,9 @@ def encode_multipart_formdata(fields, files):
     body, content_type = RequestEncodingMixin._encode_files(files, fields)
     return content_type, body
 
-encode_params = RequestEncodingMixin._encode_params
+_encode_params = RequestEncodingMixin._encode_params
 
-def build_url(url, _params):
+def build_url(url, _params=None):
     """Build the actual URL to use."""
     # TODO encode the chinese url
 
@@ -23,15 +23,24 @@ def build_url(url, _params):
     if not path:
         path = '/'
 
-    enc_params = _encode_params(_params)
-    if enc_params:
-        if query:
-            query = '%s&%s' % (query, enc_params)
-        else:
-            query = enc_params
+    if _params:
+        enc_params = _encode_params(_params)
+        if enc_params:
+            if query:
+                query = '%s&%s' % (query, enc_params)
+            else:
+                query = enc_params
+
     url = (urlunparse([scheme, netloc, path, params, query, fragment]))
     return url
 
+def quote_chinese(url, encodeing="utf-8"):
+    """Quote non-ascii characters"""
+    if isinstance(url, str):
+        return quote_chinese(url.encode(encodeing))
+
+    res = [bytes(b).decode('latin-1') if b < 128 else '%%%02X' % b for b in url]
+    return "".join(res)
 
 def format_body(data: str or dict):
     """make request body"""

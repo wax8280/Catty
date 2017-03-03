@@ -5,9 +5,29 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 19:20
 import traceback
+import aiohttp
+import asyncio
+import async_timeout
 
 from catty.message_queue.redis_queue import RedisPriorityQueue
+from catty.libs.request import Request
 
+
+class Crawler(object):
+    @staticmethod
+    def make_aio_request(request: Request):
+        return aiohttp.request(
+            method=request.method,
+            url=request.url,
+            data=request.data,
+            headers=request.headers,
+            cookies=request.cookies,
+            allow_redirects=request.allow_redirects,
+        )
+
+    async def get(self,aio_request):
+        async with aio_request as resp:
+            await resp
 
 class DownLoader(object):
     def __init__(self,
@@ -18,6 +38,7 @@ class DownLoader(object):
 
         self._downloaded_task = []
         self._task_from_scheduler = []
+        self.loop = asyncio.get_event_loop()
 
     def _get_task_from_scheduler_downloader_queue(self):
         return self.scheduler_downloader_queue.get_nowait()
@@ -39,7 +60,14 @@ class DownLoader(object):
         """load task from scheduler-downloader queue in a loop,append it to self._task_from_scheduler"""
         try:
             self._task_from_scheduler.append(
-                    self._get_task_from_scheduler_downloader_queue()
+                self._get_task_from_scheduler_downloader_queue()
             )
         except:
             traceback.print_exc()
+
+    def crawler(self):
+        """start fetch"""
+        pass
+
+    def loop(self):
+        self.loop.run_until_complete()

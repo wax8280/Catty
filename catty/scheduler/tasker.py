@@ -58,7 +58,7 @@ class Tasker(object):
         priority = 0
         callbacks = request['callbacks']
 
-        tid = md5string(request['resuest']['url'] + request['request']['body'])
+        tid = md5string(request['resuest']['url'] + str(request['request']['data']))
 
         t = {
             'tid': tid,

@@ -13,13 +13,17 @@ DEFAULT_TIMEOUT = 60
 
 class Request(object):
     def __init__(self, **kwargs):
-        self.url = build_url(kwargs['url'], kwargs.get('params', None))
+        # self.url = build_url(kwargs['url'], kwargs.get('params', None))
+        self.url = kwargs['url']
+        self.params = kwargs.get('params', None)
         self.method = kwargs.get('method', 'GET')
         self.headers = kwargs.get('headers', DEFAULT_HEADERS)
-        self.meta = kwargs.get('meta', '')
+        self.meta = kwargs.get('meta', None)
         # TODO build body
-        self.body = kwargs.get('data', '')
+        self.data = kwargs.get('data', None)
         self.timeout = kwargs.get('timeout', DEFAULT_TIMEOUT)
+        self.cookies = kwargs.get('cookies', '')
+        self.allow_redirects = kwargs.get('allow_redirects', True)
 
     @staticmethod
     def dump_request(request_obj):
@@ -28,7 +32,7 @@ class Request(object):
             'method': request_obj.method,
             'headers': request_obj.headers,
             'meta': request_obj.meta,
-            'body': request_obj.body,
+            'data': request_obj.data,
             'timeout': request_obj.timeout,
         }
 

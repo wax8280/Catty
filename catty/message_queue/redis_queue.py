@@ -165,15 +165,19 @@ class BaseAsyncQueue(object):
         self.pool_maxsize = pool_maxsize
 
     async def conn_pool(self):
-        self.redis_pool = await aioredis.create_pool(
-            (self.host, self.port), db=self.db, loop=self.loop, maxsize=self.pool_maxsize
-        )
+        if not self.redis_pool:
+            self.redis_pool = await aioredis.create_pool(
+                (self.host, self.port), db=self.db, loop=self.loop, maxsize=self.pool_maxsize
+            )
+
         return self.redis_pool
 
     async def conn(self):
-        self.redis_conn = await aioredis.create_redis(
-            (self.host, self.port), db=self.db, loop=self.loop
-        )
+        if not self.redis_conn:
+            self.redis_conn = await aioredis.create_redis(
+                (self.host, self.port), db=self.db, loop=self.loop
+            )
+        return self.redis_conn
 
     async def put(self, item):
         raise NotImplementedError
@@ -197,7 +201,7 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         self.last_qsize = 0
 
     async def qsize(self):
-        self.last_qsize =await self.redis_conn.zcard(self.name)
+        self.last_qsize = await self.redis_conn.zcard(self.name)
         return self.last_qsize
 
     async def empty(self):
@@ -231,4 +235,3 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         priority = -get_default(item, 'priority', 0)
         await self.redis_conn.zadd(self.name, priority, pickle.dumps(item))
         return True
-

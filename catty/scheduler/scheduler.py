@@ -83,6 +83,7 @@ class Scheduler(object):
 
     def _get_item_from_parser_scheduler_queue(self):
         """get item from parser-scheduler queue"""
+        # TODO catch the exception
         return self.parser_scheduler_queue.get_nowait()
 
     def _push_task_to_scheduler_parser_queue(self):

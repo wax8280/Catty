@@ -7,67 +7,90 @@
 import traceback
 import aiohttp
 import asyncio
-import async_timeout
+from aiohttp import BaseConnector
+from asyncio import Queue as AsyncQueue
+from asyncio import PriorityQueue as AsyncPriorityQueue
 
-from catty.message_queue.redis_queue import RedisPriorityQueue
+import async_timeout
+import uvloop
+
+from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 from catty.libs.request import Request
 
 
 class Crawler(object):
     @staticmethod
-    def make_aio_request(request: Request):
-        return aiohttp.request(
-            method=request.method,
-            url=request.url,
-            data=request.data,
-            headers=request.headers,
-            cookies=request.cookies,
-            allow_redirects=request.allow_redirects,
-        )
+    async def request(aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncQueue):
+        async with aiohttp.request(**aio_request, loop=loop, connector=connector) as client:
+            # TODO try it
+            response = {
+                'text': await client.text(),
+                'status': client.status,
+                'cookies': client.cookies,
+                'headers': client.headers,
+                'charset': client.charset,
+                'history': client.history,
+                'body': await client.read(),
+            }
+            priority = task['priority']
+            task.update({'response': response})
 
-    async def get(self,aio_request):
-        async with aio_request as resp:
-            await resp
+            await out_q.put((
+                priority, task
+            ))
+
 
 class DownLoader(object):
     def __init__(self,
-                 scheduler_downloader_queue: RedisPriorityQueue,
-                 downloader_parser_queue: RedisPriorityQueue):
+                 scheduler_downloader_queue: AsyncRedisPriorityQueue,
+                 downloader_parser_queue: AsyncRedisPriorityQueue,
+                 loop=None,
+                 conn_limit=1000):
         self.scheduler_downloader_queue = scheduler_downloader_queue
         self.downloader_parser_queue = downloader_parser_queue
 
-        self._downloaded_task = []
-        self._task_from_scheduler = []
-        self.loop = asyncio.get_event_loop()
+        self.loop = loop if loop is not None else uvloop.new_event_loop()
+        self.aio_conn = aiohttp.TCPConnector(limit=conn_limit)
 
-    def _get_task_from_scheduler_downloader_queue(self):
-        return self.scheduler_downloader_queue.get_nowait()
+        self.in_q = AsyncPriorityQueue()
+        self.out_q = AsyncQueue()
 
-    def _push_task_to_downloader_parser_queue(self):
+    async def load_task_from_queue(self):
+        """load task from scheduler-downloader queue"""
         try:
-            t = self._downloaded_task.pop()
-        except IndexError:
-            return
-
-        try:
-            self.downloader_parser_queue.put_nowait(t)
+            return await self.downloader_parser_queue.get()
         except:
-            traceback.print_exc()
-            self._downloaded_task.append(t)
-            # TODO log it
+            # TODO
+            # Empty or ect.
+            return None
 
-    def load_task_from_queue(self):
-        """load task from scheduler-downloader queue in a loop,append it to self._task_from_scheduler"""
+    async def push_task_to_queue(self, task):
+        """push task to downloader-parser queue"""
         try:
-            self._task_from_scheduler.append(
-                self._get_task_from_scheduler_downloader_queue()
+            return await self.downloader_parser_queue.put(task)
+        except:
+            # TODO
+            # Full or ect.
+            return False
+
+    async def start_crawler(self):
+        """get item from """
+        task = await self.load_task_from_queue()
+        if task is not None:
+            aio_request = task['request']
+            self.loop.create_task(
+                Crawler.request(
+                    aio_request=aio_request,
+                    task=task,
+                    loop=self.loop,
+                    connector=self.aio_conn,
+                    out_q=self.out_q)
             )
-        except:
-            traceback.print_exc()
 
-    def crawler(self):
-        """start fetch"""
-        pass
+        # call myself
+        self.loop.create_task(
+            self.start_crawler()
+        )
 
     def loop(self):
-        self.loop.run_until_complete()
+        self.loop.run_forever()

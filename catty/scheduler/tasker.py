@@ -17,7 +17,7 @@ import pickle
         'priority': int,
 
 
-        'request': Request_obj,
+        'request': Request_obj(a aiohttop request obj),
         'downloader': {
         },
 

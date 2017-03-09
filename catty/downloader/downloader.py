@@ -20,7 +20,8 @@ from catty.libs.request import Request
 
 class Crawler(object):
     @staticmethod
-    async def request(aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncQueue):
+    async def _request(aio_request: dict, loop, connector: BaseConnector):
+        """The real request"""
         async with aiohttp.request(**aio_request, loop=loop, connector=connector) as client:
             # TODO try it
             response = {
@@ -32,12 +33,18 @@ class Crawler(object):
                 'history': client.history,
                 'body': await client.read(),
             }
-            priority = task['priority']
-            task.update({'response': response})
+            return response
 
-            await out_q.put((
-                priority, task
-            ))
+    @staticmethod
+    async def request(aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncQueue):
+        """request,update the task and put it in the queue"""
+        response = await Crawler._request(aio_request, loop, connector)
+        priority = task['priority']
+        task.update({'response': response})
+
+        await out_q.put((
+            priority, task
+        ))
 
 
 class DownLoader(object):
@@ -74,7 +81,7 @@ class DownLoader(object):
             return False
 
     async def start_crawler(self):
-        """get item from """
+        """get item from queue and crawl it,push it to queue at last"""
         task = await self.load_task_from_queue()
         if task is not None:
             aio_request = task['request']

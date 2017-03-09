@@ -9,12 +9,13 @@ from catty.libs.request import Request
 
 class BaseSpider(object):
     def request(self, **kwargs):
+        # to mixin
         request = Request(**kwargs)
         _d = {
             'spider_name': self.name,
             'callback': kwargs['callback'],
             'request': request,
+            'meta': kwargs.get('meta', {}),
+            'priority': kwargs.get('priority', 0),
         }
-        if 'priority' not in _d.keys():
-            _d.update({'priority': 0})
         return _d

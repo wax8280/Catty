@@ -15,7 +15,7 @@ import pickle
         'spider_name': str,
         'status': int,
         'priority': int,
-
+        'meta':dict
 
         'request': Request_obj(a aiohttop request obj),
         'downloader': {
@@ -51,12 +51,12 @@ from catty.libs.utils import *
 
 class Tasker(object):
     def _make_task(self, request):
-        spider_name = request['spider_name']
         status = NOTSTART
-
         exetime = NOW
-        priority = 0
+        spider_name = request['spider_name']
+        priority = request['priority']
         callbacks = request['callbacks']
+        meta = request['meta']
 
         tid = md5string(request['resuest']['url'] + str(request['request']['data']))
 
@@ -65,6 +65,7 @@ class Tasker(object):
             'spdier_name': spider_name,
             'status': status,
             'priority': priority,
+            'meta': meta,
             'request': request['request'],
             'downloader': {},
             'scheduler': {

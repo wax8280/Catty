@@ -19,19 +19,24 @@ conn = aiohttp.TCPConnector(limit=50)
 
 class Crawler:
     @staticmethod
-    async def request(aio_request: dict, loop, connector: BaseConnector, out_q: AsynQueue):
+    async def _request(aio_request: dict, loop, connector: BaseConnector):
         async with aiohttp.request(**aio_request, loop=loop, connector=connector) as client:
-            await out_q.put({
-                'response': {
-                    'text': await client.text(),
-                    'status': client.status,
-                    'cookies': client.cookies,
-                    'headers': client.headers,
-                    'charset': client.charset,
-                    'history': client.history,
-                    'body': await client.read(),
-                }
-            })
+            response = {
+                'text': await client.text(),
+                'status': client.status,
+                'cookies': client.cookies,
+                'headers': client.headers,
+                'charset': client.charset,
+                'history': client.history,
+                'body': await client.read(),
+            }
+
+            return response
+
+    @staticmethod
+    async def request(aio_request: dict, loop, connector: BaseConnector, out_q: AsynQueue):
+        t = await Crawler._request(aio_request, loop, connector)
+        await out_q.put(t)
 
 
 async def get_from_queue(in_q: AsynPriorityQueue, out_q: AsynQueue):

@@ -35,7 +35,7 @@ import pickle
             'status_code': int,
         }
 
-        'callbacks': list,      # bound method
+        'callbacks': list,      # bound method      {'fetcher':bound_method,'parser':bound_method,'result_pipeline':'bound_method}
     }
 
 status :    0        NOTSTART

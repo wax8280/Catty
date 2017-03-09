@@ -49,6 +49,9 @@ class Request(object):
         self.dumped_request = {}
 
     def dump_request(self):
+        if self.dumped_request:
+            return self.dumped_request
+
         self.dumped_request = {
             'url': self.url,
             'method': self.method,

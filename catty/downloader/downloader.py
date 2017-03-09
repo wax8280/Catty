@@ -7,6 +7,7 @@
 import traceback
 import aiohttp
 import asyncio
+import time
 from aiohttp import BaseConnector
 from asyncio import Queue as AsyncQueue
 from asyncio import PriorityQueue as AsyncPriorityQueue
@@ -22,16 +23,20 @@ class Crawler(object):
     @staticmethod
     async def _request(aio_request: dict, loop, connector: BaseConnector):
         """The real request"""
+        t_ = time.time()
         async with aiohttp.request(**aio_request, loop=loop, connector=connector) as client:
             # TODO try it
             response = {
-                'text': await client.text(),
+                # TODO text accept encoding param to encode the body
+                # 'text': await client.text(),
                 'status': client.status,
                 'cookies': client.cookies,
-                'headers': client.headers,
+                'headers': client.raw_headers,
                 'charset': client.charset,
+                'content_type': client.content_type,
                 'history': client.history,
                 'body': await client.read(),
+                'use_time': time.time() - t_,
             }
             return response
 

@@ -33,7 +33,7 @@ class Test(asynctest.TestCase):
 
         await self.queue.clear()
 
-    async def test_get_nowait(self):
+    async def test_get(self):
         await self.queue.put({'test': 'testing1', 'priority': 0})
         await self.queue.put({'test': 'testing3', 'priority': 2})
         await self.queue.put({'test': 'testing2', 'priority': 1})

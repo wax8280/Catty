@@ -4,7 +4,7 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 10:21
-from catty.libs.url import build_url
+from catty.libs.utils import build_url
 
 # TODO
 DEFAULT_HEADERS = ''
@@ -32,8 +32,7 @@ class Request(object):
     def __init__(self, url, method='GET', params=None, data=None, headers=DEFAULT_HEADERS, auth=None,
                  allow_redirects=True, proxy=None, proxy_auth=None, timeout=None):
         self.method = method
-        # TODO build url
-        self.url = url
+        self.url = build_url(url)
         self.params = params
         self.data = data
         self.headers = headers

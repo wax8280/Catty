@@ -9,4 +9,4 @@ async_timeout
 yarl
 multidict
 asynctest
-
+furl

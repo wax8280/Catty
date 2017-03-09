@@ -5,6 +5,7 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 19:50
 import hashlib
+from furl import furl
 
 md5string = lambda x: hashlib.md5(utf8(x)).hexdigest()
 
@@ -34,3 +35,12 @@ def get_default(obj, name_or_index, default=''):
             except:
                 result = default
     return result
+
+def build_url(url):
+    """Build the actual URL to use."""
+    f = furl(url)
+    return f.url
+
+if __name__ == '__main__':
+    print(build_url('http://你好.世界/ドメイン.テスト'))
+    print(build_url('https://www.baidu.com/s?wd=墨迹'))

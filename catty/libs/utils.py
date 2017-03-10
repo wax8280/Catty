@@ -6,6 +6,7 @@
 # Created on 2017/2/24 19:50
 import hashlib
 from furl import furl
+import importlib.util
 
 md5string = lambda x: hashlib.md5(utf8(x)).hexdigest()
 
@@ -49,6 +50,30 @@ class PriorityDict(dict):
 
     def __lt__(self, other):
         return self['priority'] < other['priority']
+
+
+def load_module(script_path, module_name):
+    """
+    return a module
+    spec.loader.exec_module(foo)
+    foo.A()
+    :param script_path:
+    :param module_name:
+    :return:
+    """
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    foo = importlib.util.module_from_spec(spec)
+    return spec, foo
+
+
+def exec_module(spec, module):
+    """use loader to exec the module"""
+    spec.loader.exec_module(module)
+
+
+def reload_module(module):
+    """reload the module"""
+    importlib.reload(module)
 
 
 if __name__ == '__main__':

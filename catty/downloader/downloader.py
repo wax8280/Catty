@@ -16,7 +16,7 @@ import async_timeout
 import uvloop
 
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
-from catty.libs.request import Request
+from catty.libs.response import Response
 
 
 class Crawler(object):
@@ -29,24 +29,24 @@ class Crawler(object):
             response = {
                 # TODO text accept encoding param to encode the body
                 # 'text': await client.text(),
+                'method': client.method,
                 'status': client.status,
                 'cookies': client.cookies,
                 'headers': client.raw_headers,
                 'charset': client.charset,
                 'content_type': client.content_type,
-                'history': client.history,
+                # 'history': client.history,
                 'body': await client.read(),
                 'use_time': time.time() - t_,
             }
             return response
 
     @staticmethod
-    async def request(aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncQueue):
+    async def request(aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncRedisPriorityQueue):
         """request,update the task and put it in the queue"""
-        response = await Crawler._request(aio_request, loop, connector)
+        response = Response(**await Crawler._request(aio_request, loop, connector))
         priority = task['priority']
         task.update({'response': response})
-
         await out_q.put((
             priority, task
         ))
@@ -62,15 +62,15 @@ class DownLoader(object):
         self.downloader_parser_queue = downloader_parser_queue
 
         self.loop = loop if loop is not None else uvloop.new_event_loop()
-        self.aio_conn = aiohttp.TCPConnector(limit=conn_limit)
+        self.aio_conn = aiohttp.TCPConnector(limit=conn_limit, loop=self.loop)
 
-        self.in_q = AsyncPriorityQueue()
-        self.out_q = AsyncQueue()
+        # self.in_q = AsyncPriorityQueue()
+        # self.out_q = AsyncQueue()
 
     async def load_task_from_queue(self):
         """load task from scheduler-downloader queue"""
         try:
-            return await self.downloader_parser_queue.get()
+            return await self.scheduler_downloader_queue.get()
         except:
             # TODO
             # Empty or ect.
@@ -96,7 +96,7 @@ class DownLoader(object):
                     task=task,
                     loop=self.loop,
                     connector=self.aio_conn,
-                    out_q=self.out_q)
+                    out_q=self.downloader_parser_queue)
             )
 
         # call myself

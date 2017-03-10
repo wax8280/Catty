@@ -36,7 +36,7 @@ def test_downloader():
     async def put_test_data():
         for i in range(10):
             task = {
-                'request': Request(url='http://blog.vincentzhong.cn/a={}'.format(i)).dump_request(),
+                'request': str(Request(url='http://blog.vincentzhong.cn/a={}'.format(i))),
                 'priority': 1
             }
             await scheduler_downloader_queue.put(task)

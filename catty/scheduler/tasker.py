@@ -30,11 +30,7 @@ from catty.libs.utils import PriorityDict
             'item': dict,          # the dict return from paser func
         },
 
-        'response': {
-            'response_obj': Response,
-            'status': int,
-            'status_code': int,
-        }
+        'response': Response_obj,
 
         'callbacks': list,      # bound method      {'fetcher':bound_method,'parser':bound_method,'result_pipeline':'bound_method}
     }

@@ -6,66 +6,93 @@
 # Created on 2017/2/26 10:05
 import time
 import traceback
+import uvloop
+from queue import PriorityQueue
+import asyncio
 
 from catty.exception import *
-from catty.message_queue.redis_queue import RedisPriorityQueue
+from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 
 
 class Parser(object):
     LOAD_SPIDER_INTERVAL = 0.3
 
     def __init__(self,
-                 downloader_parser_queue: RedisPriorityQueue,
-                 parser_scheduler_queue: RedisPriorityQueue):
+                 downloader_parser_queue: AsyncRedisPriorityQueue,
+                 parser_scheduler_queue: AsyncRedisPriorityQueue,
+                 loop=None,
+                 ):
+
         self.downloader_parser_queue = downloader_parser_queue
         self.parser_scheduler_queue = parser_scheduler_queue
 
         self._count_pre_loop = 30
 
-        self._task_from_downloader = []
-        self._task_to_scheduler = []
+        self.inner_in_q = PriorityQueue()
+        self.inner_ou_q = PriorityQueue()
 
-    def _get_task_from_downloader_parser_queue(self):
-        """load item from downloader_parser queue"""
-        return self.downloader_parser_queue.get_nowait()
+        self.loop = loop if loop is not None else uvloop.new_event_loop()
 
-    def load_task(self):
-        """load TASK from downloader_parser queue in a loop,append it to self._task_from_downloader"""
+    async def conn_redis(self):
+        """conn the redis"""
+        await self.downloader_parser_queue.conn()
+        await self.parser_scheduler_queue.conn()
+
+    async def _get_task(self):
+        """load TASK from downloader_parser queue"""
+        return await self.downloader_parser_queue.get()
+
+    async def _put_task(self, item):
+        """put TASK to parser-scheduler queue"""
+        return await self.parser_scheduler_queue.put(item)
+
+    async def load_task(self):
+        """load TASK from downloader-parser queue,put it in Parser own queue"""
+        self.inner_in_q.put(
+            await self._get_task()
+        )
+
+    async def put_task(self):
+        """put TASK from Parser own queue to parser-scheduler queue"""
         try:
-            self._task_from_downloader.append(
-                    self._get_task_from_downloader_parser_queue()
-            )
+            task = self.inner_in_q.get_nowait()
         except:
-            traceback.print_exc()
+            asyncio.sleep(0.5, loop=self.loop)
+            task = None
+        if task:
+            await self._put_task(
+                task
+            )
 
     def _run_ins_func(self, func, task):
         """run the spider_ins boned method to parser it and return a item,and append it to self._task"""
-        _response = task['response']['response_obj']
+        _response = task['response']
         parser_return = func(_response, task=task)
 
         # if return a dict(normal)
         if isinstance(parser_return, dict):
             task['parser'].update({'item': parser_return})
-            self._task_to_scheduler.append(task)
+            self.inner_ou_q.put(task)
 
     def make_tasks(self):
         """get old task from self._task_from_downloader and make new task to append it to self._task_to_scheduler"""
         try:
-            task = self._task_from_downloader.pop()
+            task = self.inner_in_q.get()
         except IndexError:
             return
 
         callback = task['callbacks']
         parser_func = callback.get('parser', None)
         # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
-        try:
-            self._run_ins_func(parser_func, task)
-        except Retry_current_task:
-            # handle it like a new task
-            self._task_to_scheduler.append(task)
-        except:
-            traceback.print_exc()
-            pass
+        if parser_func:
+            try:
+                self._run_ins_func(parser_func, task)
+            except Retry_current_task:
+                # handle it like a new task
+                self.inner_ou_q.put(task)
+            except:
+                traceback.print_exc()
+                pass
 
     def _loop(self):
         __c__ = 0

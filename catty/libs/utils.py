@@ -36,11 +36,29 @@ def get_default(obj, name_or_index, default=''):
                 result = default
     return result
 
+
 def build_url(url):
     """Build the actual URL to use."""
     f = furl(url)
     return f.url
 
+
+class PriorityDict(dict):
+    def __eq__(self, other):
+        return self['priority'] == other['priority']
+
+    def __lt__(self, other):
+        return self['priority'] < other['priority']
+
+
 if __name__ == '__main__':
-    print(build_url('http://你好.世界/ドメイン.テスト'))
-    print(build_url('https://www.baidu.com/s?wd=墨迹'))
+    # print(build_url('http://你好.世界/ドメイン.テスト'))
+    # print(build_url('https://www.baidu.com/s?wd=墨迹'))
+
+
+    foo = PriorityDict({'priority': 10, 'name': 'foo'})
+    bar = PriorityDict({'priority': 10, 'name': 'bar'})
+    print(foo == bar)
+    foobar = PriorityDict({'priority': 20, 'name': 'foobar'})
+    print(foobar == bar)
+    print(foobar > bar)

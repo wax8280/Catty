@@ -6,6 +6,7 @@
 # Created on 2017/2/24 13:21
 
 import pickle
+from catty.libs.utils import PriorityDict
 
 # task schema
 """
@@ -60,7 +61,7 @@ class Tasker(object):
 
         tid = md5string(request['resuest']['url'] + str(request['request']['data']))
 
-        t = {
+        return PriorityDict({
             'tid': tid,
             'spdier_name': spider_name,
             'status': status,
@@ -74,9 +75,7 @@ class Tasker(object):
             'parser': {},
             'response': {},
             'callbacks': callbacks,
-        }
-
-        return t
+        })
 
     def make(self, request):
         return self._make_task(request)

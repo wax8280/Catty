@@ -7,13 +7,21 @@
 from catty.parser.base_parser import BaseParser
 from catty.spider.base_spider import BaseSpider
 
+
 class MyParser(BaseParser):
+    @staticmethod
+    def test_static():
+        print('test_static')
+
+    def test(self):
+        print('parser testing')
+
     def parser_content_page(self, response):
         print('parser_content_page')
         content = 'content in parser_content_page'
 
         # must return a dict
-        return {'content': content,}
+        return {'content': content, }
 
         # if need,you can return a task(manual retry)
         # self.retry_current_task()
@@ -46,22 +54,22 @@ class MyParser(BaseParser):
         print('saved')
 
 
-class MySpider(BaseSpider, MyParser):
+class Spider(BaseSpider, MyParser):
     name = 'MySpider'
 
     def start(self):
         callbacks = [
-            {'parser': self.parser_list_page, 'fetcher': self.get_list, 'result_pipeline': self.save_list},
+            {'parser': self.test, 'fetcher': self.get_list, 'result_pipeline': self.save_list},
             {'parser': self.parser_content_page, 'fetcher': self.get_content},
         ]
 
         return self.request(
-                url='http://blog.vincentzhong.cn/',
-                method='GET',
-                headers='',
-                # meta to save somethings
-                meta='',
-                callback=callbacks,
+            url='http://blog.vincentzhong.cn/',
+            method='GET',
+            headers='',
+            # meta to save somethings
+            meta='',
+            callback=callbacks,
         )
 
     def get_list(self, items):
@@ -70,17 +78,17 @@ class MySpider(BaseSpider, MyParser):
             {'parser': self.parser_list_page, 'fetcher': self.get_list, 'result_pipeline': self.save_list}
         ]
         return self.request(
-                url=items['next_page'],
-                callback=callbacks,
-                # meta=items['meta'],
+            url=items['next_page'],
+            callback=callbacks,
+            # meta=items['meta'],
         )
 
     def get_content(self, items):
         requests = []
         for url, title in items[0]:
             requests.append(self.request(
-                    url=url,
-                    callback={'result_pipeline': self.save_content}
+                url=url,
+                callback={'result_pipeline': self.save_content}
             ))
 
         return requests

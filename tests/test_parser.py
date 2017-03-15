@@ -20,7 +20,7 @@ class TestParser(asynctest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from catty.demo.spider import MySpider
+        from catty.demo.spider import Spider
         from catty.scheduler.tasker import Tasker
 
         cls.downloader_parser_queue = AsyncRedisPriorityQueue('MySpider:DP', loop=cls.loop)
@@ -31,7 +31,7 @@ class TestParser(asynctest.TestCase):
             cls.parser_scheduler_queue,
             cls.loop
         )
-        myspider = MySpider()
+        myspider = Spider()
         tasker = Tasker()
 
         cls.task = tasker._make_task(myspider.start())

@@ -11,11 +11,24 @@ class BaseSpider(object):
     def request(self, **kwargs):
         # to mixin
         request = Request(**kwargs)
+        callback = kwargs['callback']
+        # just str
+        n_callback = [{k: v.__name__ for k, v in each_callback.items()} for each_callback in callback]
+
         _d = {
             'spider_name': self.name,
-            'callback': kwargs['callback'],
+            'callback': n_callback,
             'request': request,
             'meta': kwargs.get('meta', {}),
             'priority': kwargs.get('priority', 0),
         }
         return _d
+
+
+if __name__ == '__main__':
+    from catty.demo.spider import Spider
+
+    myspider = Spider()
+    task=myspider.start()
+
+    print(myspider.__getattribute__(task['callback'][0]['parser']))

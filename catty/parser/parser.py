@@ -4,14 +4,22 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 10:05
+import asyncio
+import inspect
 import time
 import traceback
-import uvloop
+from copy import deepcopy
 from queue import PriorityQueue
-import asyncio
 
 from catty.exception import *
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
+
+try:
+    import uvloop
+
+    LOOP = uvloop.uvloop.new_event_loop()
+except ImportError:
+    LOOP = asyncio.get_event_loop()
 
 
 class Parser(object):
@@ -20,7 +28,7 @@ class Parser(object):
     def __init__(self,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
-                 loop=None,
+                 loop=LOOP,
                  ):
 
         self.downloader_parser_queue = downloader_parser_queue
@@ -31,7 +39,7 @@ class Parser(object):
         self.inner_in_q = PriorityQueue()
         self.inner_ou_q = PriorityQueue()
 
-        self.loop = loop if loop is not None else uvloop.new_event_loop()
+        self.loop = loop
 
     async def conn_redis(self):
         """conn the redis"""
@@ -54,20 +62,25 @@ class Parser(object):
 
     async def put_task(self):
         """put TASK from Parser own queue to parser-scheduler queue"""
-        try:
-            task = self.inner_in_q.get_nowait()
-        except:
-            asyncio.sleep(0.5, loop=self.loop)
-            task = None
-        if task:
-            await self._put_task(
-                task
-            )
+        task = None
+        while not task:
+            try:
+                task = self.inner_ou_q.get_nowait()
+            except:
+                asyncio.sleep(0.5, loop=self.loop)
+        await self._put_task(
+            task
+        )
 
     def _run_ins_func(self, func, task):
         """run the spider_ins boned method to parser it and return a item,and append it to self._task"""
         _response = task['response']
-        parser_return = func(_response, task=task)
+        _signature = inspect.signature(func).parameters
+        assert 'response' in _signature
+        if 'task' in _signature:
+            parser_return = func(_response, task=task)
+        else:
+            parser_return = func(_response)
 
         # if return a dict(normal)
         if isinstance(parser_return, dict):
@@ -81,24 +94,26 @@ class Parser(object):
         except IndexError:
             return
 
-        callback = task['callbacks']
-        parser_func = callback.get('parser', None)
-        # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
-        if parser_func:
-            try:
-                self._run_ins_func(parser_func, task)
-            except Retry_current_task:
-                # handle it like a new task
-                self.inner_ou_q.put(task)
-            except:
-                traceback.print_exc()
-                pass
+        callback = task['callback']
+        for each_callback in callback:
+            each_task = deepcopy(task)
+            parser_func = each_callback.get('parser', None)
+            # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
+            if parser_func:
+                try:
+                    self._run_ins_func(parser_func, each_task)
+                except Retry_current_task:
+                    # handle it like a new task
+                    self.inner_ou_q.put(each_task)
+                except:
+                    traceback.print_exc()
+                    pass
 
-    def _loop(self):
+    async def _loop(self):
         __c__ = 0
         while not self.downloader_parser_queue and __c__ < self._count_pre_loop:
             __c__ += 1
-            self.load_task()
+            await self.load_task()
             self.make_tasks()
 
     def run(self):

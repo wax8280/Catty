@@ -30,7 +30,7 @@ DEFAULT_TIMEOUT = 60
 
 class Request(object):
     def __init__(self, url, method='GET', params=None, data=None, headers=DEFAULT_HEADERS, auth=None,
-                 allow_redirects=True, proxy=None, proxy_auth=None, timeout=None, meta=None):
+                 allow_redirects=True, proxy=None, proxy_auth=None, timeout=None,**kwargs):
         self.method = method
         self.url = build_url(url)
         self.params = params
@@ -47,6 +47,9 @@ class Request(object):
         # self.cookies = kwargs.get('cookies', '')
 
         self.dumped_request = {}
+
+    def __getitem__(self, item):
+        return self.__getattribute__(item)
 
     def dump_request(self):
         if self.dumped_request:

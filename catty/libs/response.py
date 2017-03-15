@@ -38,6 +38,10 @@ class Response(object):
 
         self.dumped_request = {}
 
+
+    def __getitem__(self, item):
+        return self.__getattribute__(item)
+
     def dump_request(self):
         if self.dumped_request:
             return self.dumped_request

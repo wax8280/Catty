@@ -25,10 +25,6 @@ class Crawler(object):
             allow_redirects=request.allow_redirects,
         )
 
-    async def get(self,aio_request):
-        async with aio_request as resp:
-            await resp
-
 class DownLoader(object):
     def __init__(self,
                  scheduler_downloader_queue: RedisPriorityQueue,

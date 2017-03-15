@@ -27,7 +27,7 @@ class Test(unittest.TestCase):
 
     def test_spider_start_method(self):
         from catty.demo.spider import MySpider
-        self.scheduler._instantiate_spdier(spider_class=MySpider, spider_name='MySpider')
+        self.scheduler._instantiate_spider(spider_class=MySpider, spider_name='MySpider')
         self.scheduler.make_task_from_start()
 
         self.assertIn(
@@ -37,7 +37,7 @@ class Test(unittest.TestCase):
 
     def test_make_tasks(self):
         from catty.demo.spider import MySpider
-        self.scheduler._instantiate_spdier(spider_class=MySpider, spider_name='MySpider')
+        self.scheduler._instantiate_spider(spider_class=MySpider, spider_name='MySpider')
         self.scheduler.make_task_from_start()
 
         # assume the task downloaded

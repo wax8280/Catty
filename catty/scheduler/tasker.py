@@ -6,6 +6,7 @@
 # Created on 2017/2/24 13:21
 
 import pickle
+from catty.libs.utils import PriorityDict
 
 # task schema
 """
@@ -15,9 +16,9 @@ import pickle
         'spider_name': str,
         'status': int,
         'priority': int,
+        'meta':dict
 
-
-        'request': Request_obj,
+        'request': Request_obj(a aiohttop request obj),
         'downloader': {
         },
 
@@ -29,13 +30,9 @@ import pickle
             'item': dict,          # the dict return from paser func
         },
 
-        'response': {
-            'response_obj': Response,
-            'status': int,
-            'status_code': int,
-        }
+        'response': Response_obj,
 
-        'callbacks': list,      # bound method
+        'callbacks': list,      # bound method      {'fetcher':bound_method,'parser':bound_method,'result_pipeline':'bound_method}
     }
 
 status :    0        NOTSTART
@@ -51,20 +48,21 @@ from catty.libs.utils import *
 
 class Tasker(object):
     def _make_task(self, request):
-        spider_name = request['spider_name']
         status = NOTSTART
-
         exetime = NOW
-        priority = 0
+        spider_name = request['spider_name']
+        priority = request['priority']
         callbacks = request['callbacks']
+        meta = request['meta']
 
         tid = md5string(request['resuest']['url'] + str(request['request']['data']))
 
-        t = {
+        return PriorityDict({
             'tid': tid,
             'spdier_name': spider_name,
             'status': status,
             'priority': priority,
+            'meta': meta,
             'request': request['request'],
             'downloader': {},
             'scheduler': {
@@ -73,9 +71,7 @@ class Tasker(object):
             'parser': {},
             'response': {},
             'callbacks': callbacks,
-        }
-
-        return t
+        })
 
     def make(self, request):
         return self._make_task(request)

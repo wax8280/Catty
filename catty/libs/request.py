@@ -30,7 +30,7 @@ DEFAULT_TIMEOUT = 60
 
 class Request(object):
     def __init__(self, url, method='GET', params=None, data=None, headers=DEFAULT_HEADERS, auth=None,
-                 allow_redirects=True, proxy=None, proxy_auth=None, timeout=None):
+                 allow_redirects=True, proxy=None, proxy_auth=None, timeout=None, meta=None):
         self.method = method
         self.url = build_url(url)
         self.params = params

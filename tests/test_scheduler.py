@@ -44,8 +44,8 @@ class Test(unittest.TestCase):
         task = self.scheduler._task_to_downloader.pop()
         # parser中，有多少个callback line就复制多少个 task
         # 因为不同的parser生成不同的item，不同的item生成不同的task
-        task['callbacks'] = task['callbacks'][0]
-        item = task['callbacks']['parser'](response='')
+        task['callback'] = task['callback'][0]
+        item = task['callback']['parser'](response='')
         task.update({'item': item})
         self.scheduler._task_from_parser.append(task)
 

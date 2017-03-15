@@ -10,11 +10,10 @@ from catty.spider.base_spider import BaseSpider
 class MyParser(BaseParser):
     def parser_content_page(self, response):
         print('parser_content_page')
-        content_urls = '....'
-        content_titles = '....'
+        content = 'content in parser_content_page'
 
         # must return a dict
-        return {'content_url': content_urls, 'content_titles': content_titles}
+        return {'content': content,}
 
         # if need,you can return a task(manual retry)
         # self.retry_current_task()
@@ -28,15 +27,17 @@ class MyParser(BaseParser):
         # ]
         # return self.request(
         #         url='',
-        #         callbacks=callbacks,
+        #         callback=callbacks,
         #         meta='',
         # )
 
     def parser_list_page(self, response):
         print('parser_list_page')
-        next_page = '....'
+        content_urls = 'content_urls in parser_content_page'
+        content_titles = 'content_titles in parser_content_page'
 
-        return {'next_page': next_page}
+        # must return a dict
+        return {'content_url': content_urls, 'content_titles': content_titles}
 
     def save_content(self, response):
         print('saved')
@@ -60,7 +61,7 @@ class MySpider(BaseSpider, MyParser):
                 headers='',
                 # meta to save somethings
                 meta='',
-                callbacks=callbacks,
+                callback=callbacks,
         )
 
     def get_list(self, items):
@@ -70,7 +71,7 @@ class MySpider(BaseSpider, MyParser):
         ]
         return self.request(
                 url=items['next_page'],
-                callbacks=callbacks,
+                callback=callbacks,
                 # meta=items['meta'],
         )
 
@@ -79,7 +80,7 @@ class MySpider(BaseSpider, MyParser):
         for url, title in items[0]:
             requests.append(self.request(
                     url=url,
-                    callbacks={'result_pipeline': self.save_content}
+                    callback={'result_pipeline': self.save_content}
             ))
 
         return requests

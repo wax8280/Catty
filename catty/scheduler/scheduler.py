@@ -141,7 +141,7 @@ class Scheduler(object):
             task = self._task_from_parser.pop()
         except IndexError:
             return
-        callback = task['callbacks']
+        callback = task['callback']
 
         fetcher_func = callback.get('fetcher', None)
         item = task['parser']['item']
@@ -205,7 +205,7 @@ class Scheduler(object):
 if __name__ == '__main__':
     tasker = Tasker()
     # spider = MySpider()
-    # dumped = tasker.dump_task(tasker.make(spider.start())['callbacks'])
+    # dumped = tasker.dump_task(tasker.make(spider.start())['callback'])
     # print(dumped)
 
     # a=tasker.load_task(b'\x80\x03]q\x00(}q\x01(X\x06\x00\x00\x00parserq\x02cbuiltins\ngetattr\nq\x03ccatty.demo.spider\nMySpider\nq\x04)\x81q\x05X\x13\x00\x00\x00parser_content_pageq\x06\x86q\x07Rq\x08X\x07\x00\x00\x00fetcherq\th\x03h\x05X\x0b\x00\x00\x00get_contentq\n\x86q\x0bRq\x0cu}q\r(h\x02h\x03h\x05X\x10\x00\x00\x00parser_list_pageq\x0e\x86q\x0fRq\x10h\th\x03h\x05X\x08\x00\x00\x00get_listq\x11\x86q\x12Rq\x13X\x0f\x00\x00\x00result_pipelineq\x14h\x03h\x05X\t\x00\x00\x00save_listq\x15\x86q\x16Rq\x17ue.')

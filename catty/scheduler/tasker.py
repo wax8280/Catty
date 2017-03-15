@@ -32,7 +32,7 @@ from catty.libs.utils import PriorityDict
 
         'response': Response_obj,
 
-        'callbacks': list,      # bound method      {'fetcher':bound_method,'parser':bound_method,'result_pipeline':'bound_method}
+        'callback': list,      # bound method      {'fetcher':bound_method,'parser':bound_method,'result_pipeline':'bound_method}
     }
 
 status :    0        NOTSTART
@@ -52,10 +52,10 @@ class Tasker(object):
         exetime = NOW
         spider_name = request['spider_name']
         priority = request['priority']
-        callbacks = request['callbacks']
+        callback = request['callback']
         meta = request['meta']
 
-        tid = md5string(request['resuest']['url'] + str(request['request']['data']))
+        tid = md5string(request['request']['url'] + str(request['request']['data']))
 
         return PriorityDict({
             'tid': tid,
@@ -70,7 +70,7 @@ class Tasker(object):
             },
             'parser': {},
             'response': {},
-            'callbacks': callbacks,
+            'callback': callback,
         })
 
     def make(self, request):

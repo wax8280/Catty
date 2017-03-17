@@ -10,8 +10,8 @@ import queue
 import time
 from asyncio import queues as async_queue
 
-import redis
 import aioredis
+import redis
 
 from catty.libs.utils import get_default
 
@@ -159,9 +159,8 @@ class BaseAsyncQueue(object):
         self.db = db
         self.pw = password
 
-        self.redis_conn = None
         self.redis_pool = None
-
+        self.redis_conn = None
         self.pool_maxsize = pool_maxsize
 
     async def conn_pool(self):
@@ -218,10 +217,11 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
             return False
 
     async def get(self):
-        pipe = self.redis_conn.pipeline()
-        pipe.zrange(self.name, 0, 0)
-        pipe.zremrangebyrank(self.name, 0, 0)
-        result, count = await pipe.execute()
+        # pipe = self.redis_conn.pipeline()
+        tr = self.redis_conn.multi_exec()
+        tr.zrange(self.name, 0, 0)
+        tr.zremrangebyrank(self.name, 0, 0)
+        result, count = await tr.execute()
         if not result:
             raise self.Empty
 

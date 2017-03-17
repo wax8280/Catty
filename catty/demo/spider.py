@@ -59,7 +59,7 @@ class Spider(BaseSpider, MyParser):
 
     def start(self):
         callbacks = [
-            {'parser': self.test, 'fetcher': self.get_list, 'result_pipeline': self.save_list},
+            {'parser': self.parser_list_page, 'fetcher': self.get_list, 'result_pipeline': self.save_list},
             {'parser': self.parser_content_page, 'fetcher': self.get_content},
         ]
 
@@ -72,20 +72,20 @@ class Spider(BaseSpider, MyParser):
             callback=callbacks,
         )
 
-    def get_list(self, items):
+    def get_list(self, item):
         callbacks = [
             {'parser': self.parser_content_page, 'fetcher': self.get_content},
             {'parser': self.parser_list_page, 'fetcher': self.get_list, 'result_pipeline': self.save_list}
         ]
         return self.request(
-            url=items['next_page'],
+            url=item['next_page'],
             callback=callbacks,
             # meta=items['meta'],
         )
 
-    def get_content(self, items):
+    def get_content(self, item):
         requests = []
-        for url, title in items[0]:
+        for url, title in item[0]:
             requests.append(self.request(
                 url=url,
                 callback={'result_pipeline': self.save_content}

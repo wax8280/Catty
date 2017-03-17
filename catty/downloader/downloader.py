@@ -4,19 +4,13 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 19:20
-import traceback
-import aiohttp
-import asyncio
 import time
+
+import aiohttp
 from aiohttp import BaseConnector
-from asyncio import Queue as AsyncQueue
-from asyncio import PriorityQueue as AsyncPriorityQueue
 
-import async_timeout
-import uvloop
-
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 from catty.libs.response import Response
+from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 
 
 class Crawler(object):
@@ -51,16 +45,17 @@ class Crawler(object):
             priority, task
         ))
 
+
 class DownLoader(object):
     def __init__(self,
                  scheduler_downloader_queue: AsyncRedisPriorityQueue,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
-                 loop=None,
+                 loop,
                  conn_limit=1000):
         self.scheduler_downloader_queue = scheduler_downloader_queue
         self.downloader_parser_queue = downloader_parser_queue
 
-        self.loop = loop if loop is not None else uvloop.new_event_loop()
+        self.loop = loop
         self.aio_conn = aiohttp.TCPConnector(limit=conn_limit, loop=self.loop)
 
         # self.in_q = AsyncPriorityQueue()

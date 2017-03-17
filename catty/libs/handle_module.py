@@ -95,10 +95,14 @@ class SpiderModuleHandle(ModuleHandle):
     def to_instance_spider(self):
         for file_name, value in self.namespace.items():
             spec, module = value
-            spider_cls = getattr(module, 'Spider')
-            self.spider_instantiation.update({
-                spider_cls.name: spider_cls()
-            })
+            # TODO the spider name
+            try:
+                spider_cls = getattr(module, 'Spider')
+                self.spider_instantiation.update({
+                    spider_cls.name: spider_cls()
+                })
+            except Exception as e:
+                print(e)
 
 
 if __name__ == '__main__':

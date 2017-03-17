@@ -5,7 +5,6 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 19:50
 import hashlib
-
 from furl import furl
 
 md5string = lambda x: hashlib.md5(utf8(x)).hexdigest()
@@ -50,6 +49,15 @@ class PriorityDict(dict):
 
     def __lt__(self, other):
         return self['priority'] < other['priority']
+
+
+def get_eventloop():
+    try:
+        import uvloop
+        return uvloop.uvloop.new_event_loop()
+    except ImportError:
+        import asyncio
+        return asyncio.get_event_loop()
 
 
 if __name__ == '__main__':

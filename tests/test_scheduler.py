@@ -175,7 +175,7 @@ if __name__ == '__main__':
     scheduler.instantiate_spider()
 
     async def put_task():
-        for c in range(50):
+        for c in range(10):
             await parser_scheduler_queue.put(PriorityDict({
                 'test{}'.format(c): 'testing',
                 'priority': c
@@ -183,6 +183,7 @@ if __name__ == '__main__':
 
 
     def test_run_async_queue():
+        # 该测试看起来并没有真正实现异步，其实是因为
         def mock_select():
             while True:
                 scheduler.selected_task.put(
@@ -198,8 +199,7 @@ if __name__ == '__main__':
         loop.create_task(put_task())
         loop.run_forever()
 
-
-    # test_run_async_queue()
+    test_run_async_queue()
 
     def test_run():
         t1 = threading.Thread(target=scheduler.run_async_queue)
@@ -212,4 +212,4 @@ if __name__ == '__main__':
 
         loop.run_forever()
 
-    test_run()
+    # test_run()

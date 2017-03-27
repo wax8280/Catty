@@ -4,7 +4,6 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 10:05
-import asyncio
 import inspect
 import traceback
 from copy import deepcopy
@@ -15,20 +14,17 @@ from catty.exception import *
 from catty.libs.handle_module import SpiderModuleHandle
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 
+LOAD_QUEUE_SLEEP = 1
+
 
 class Parser(object):
-    LOAD_SPIDER_INTERVAL = 0.3
-
     def __init__(self,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
-                 loop,
-                 ):
+                 loop):
 
         self.downloader_parser_queue = downloader_parser_queue
         self.parser_scheduler_queue = parser_scheduler_queue
-
-        self._count_pre_loop = 30
 
         self.inner_in_q = PriorityQueue()
         self.inner_ou_q = PriorityQueue()
@@ -39,7 +35,7 @@ class Parser(object):
         self.spider_module_handle.to_instance_spider()
 
     async def conn_redis(self):
-        """conn the redis"""
+        """Conn the redis"""
         await self.downloader_parser_queue.conn()
         await self.parser_scheduler_queue.conn()
 
@@ -48,25 +44,86 @@ class Parser(object):
         return await self.downloader_parser_queue.get()
 
     async def _put_task(self, item):
-        """put TASK to parser-scheduler queue"""
+        """Put TASK to parser-scheduler queue"""
         return await self.parser_scheduler_queue.put(item)
 
     async def load_task(self):
         """load TASK from downloader-parser queue,put it in Parser own queue"""
-        self.inner_in_q.put(
-            await self._get_task()
+        try:
+            t = await self.downloader_parser_queue.get()
+        except AsyncQueueEmpty:
+            print('[load_task]Redis Queue is empty')
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+            self.loop.create_task(
+                self.load_task()
+            )
+            return
+        except Exception:
+            traceback.print_exc()
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+            self.loop.create_task(
+                self.load_task()
+            )
+            return
+
+        done = False
+        while not done:
+            try:
+                self.inner_in_q.put_nowait(t)
+                done = True
+            except QueueFull:
+                print('[load_task]inner queue is full.')
+            except Exception:
+                traceback.print_exc()
+                await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+
+        print('[load_task]Load item')
+        self.loop.create_task(
+            self.load_task()
+        )
+        self.loop.create_task(
+            self.push_task()
         )
 
-    async def put_task(self):
+
+    async def push_task(self):
         """put TASK from Parser own queue to parser-scheduler queue"""
-        task = None
-        while not task:
+        try:
+            t = self.inner_ou_q.get_nowait()
+        except QueueEmpty:
+            print('[push_task]inner queue is empty.')
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+            self.loop.create_task(
+                self.push_task()
+            )
+            return
+        except Exception:
+            traceback.print_exc()
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+            self.loop.create_task(
+                self.push_task()
+            )
+            return
+
+        done = False
+        while not done:
             try:
-                task = self.inner_ou_q.get_nowait()
-            except:
-                asyncio.sleep(0.5, loop=self.loop)
-        await self._put_task(
-            task
+                await self.parser_scheduler_queue.put(t)
+                done = True
+            except AsyncQueueFull:
+                traceback.print_exc()
+                print('[push_task]Redis queue is full')
+                await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+            except Exception as e:
+                traceback.print_exc()
+                await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
+
+        print('[push_task]Push item')
+        self.loop.create_task(
+            self.push_task()
+        )
+        self.loop.create_task(
+            self.load_task()
         )
 
     def _run_ins_func(self, spider_name, method_name, task):

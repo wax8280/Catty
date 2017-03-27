@@ -37,6 +37,7 @@ class TestParser(asynctest.TestCase):
         cls.task = tasker._make_task(myspider.start())
 
     async def setUp(self):
+        self.parser.loop = self.loop
         await self.downloader_parser_queue.conn()
         await self.parser_scheduler_queue.conn()
 
@@ -69,7 +70,7 @@ class TestParser(asynctest.TestCase):
             1
         )
 
-    async def test_put_task(self):
+    async def test_push_task(self):
         task = deepcopy(self.task)
         # downloader
         task.update({
@@ -95,7 +96,7 @@ class TestParser(asynctest.TestCase):
             self.parser.inner_in_q.get()
         )
 
-        await self.parser.put_task()
+        await self.parser.push_task()
 
         result = await self.parser_scheduler_queue.get()
         self.assertEqual(
@@ -127,7 +128,7 @@ class TestParser(asynctest.TestCase):
         self.parser.make_tasks()
         self.assertEqual(
             self.parser.inner_ou_q.get()['parser']['item']['content_url'],
-            'content_urls in parser_content_page'
+            ['url1', 'url2']
         )
         self.assertEqual(
             self.parser.inner_ou_q.get()['parser']['item']['content'],

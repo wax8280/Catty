@@ -21,7 +21,7 @@ STARTED = 1
 READY_TO_START = 2
 STOP = 3
 
-LOAD_QUEUE_SLEEP = 1
+LOAD_QUEUE_SLEEP = 2
 SELECTOR_SLEEP = 3
 
 
@@ -128,10 +128,12 @@ class Scheduler(object):
         self.loop.create_task(
             self.load_task()
         )
+        self.loop.create_task(
+            self.push_task()
+        )
 
     async def push_task(self):
         """ push task to scheduler-downloader queue in a loop"""
-
         try:
             t = self.selected_task.get_nowait()
         except QueueEmpty:
@@ -165,6 +167,9 @@ class Scheduler(object):
         print('[push_task]Push item')
         self.loop.create_task(
             self.push_task()
+        )
+        self.loop.create_task(
+            self.load_task()
         )
 
     # ---------------------------------------------------------
@@ -266,8 +271,8 @@ class Scheduler(object):
     #     pass
 
     def run_async_queue(self):
-        self.loop.create_task(self.load_task())
         self.loop.create_task(self.push_task())
+        self.loop.create_task(self.load_task())
         # self.loop.run_forever()
 
     def run_task_maker(self):

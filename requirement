@@ -10,3 +10,4 @@ yarl
 multidict
 asynctest
 furl
+pyyaml

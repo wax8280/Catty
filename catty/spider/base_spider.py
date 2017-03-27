@@ -13,7 +13,13 @@ class BaseSpider(object):
         request = Request(**kwargs)
         callback = kwargs['callback']
         # just str
-        n_callback = [{k: v.__name__ for k, v in each_callback.items()} for each_callback in callback]
+        n_callback = []
+        for each_callback in callback:
+            for k, v in each_callback.items():
+                if not isinstance(v, list):
+                    n_callback.append({k: v.__name__})
+                else:
+                    n_callback.append({k: [i.__name__ for i in v]})
 
         _d = {
             'spider_name': self.name,
@@ -29,6 +35,11 @@ if __name__ == '__main__':
     from catty.demo.spider import Spider
 
     myspider = Spider()
-    task=myspider.start()
+    task = myspider.start()
 
+    print(task)
     print(myspider.__getattribute__(task['callback'][0]['parser']))
+    """
+    {'spider_name': 'MySpider', 'callback': [{'parser': 'test', 'fetcher': 'get_list', 'result_pipeline': 'save_list'}, {'parser': 'parser_content_page', 'fetcher': 'get_content'}], 'request': <catty.libs.request.Request object at 0x000001A3D87245C0>, 'meta': '', 'priority': 0}
+    <bound method MyParser.test of <catty.demo.spider.Spider object at 0x000001A3D87245F8>>
+    """

@@ -59,7 +59,7 @@ class Tasker(object):
 
         return PriorityDict({
             'tid': tid,
-            'spdier_name': spider_name,
+            'spider_name': spider_name,
             'status': status,
             'priority': priority,
             'meta': meta,

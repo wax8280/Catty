@@ -41,17 +41,9 @@ class MyParser(BaseParser):
 
     def parser_list_page(self, response):
         print('parser_list_page')
-        content_urls = 'content_urls in parser_content_page'
-        content_titles = 'content_titles in parser_content_page'
 
         # must return a dict
-        return {'content_url': content_urls, 'content_titles': content_titles}
-
-    def save_content(self, response):
-        print('saved')
-
-    def save_list(self, response):
-        print('saved')
+        return {'content_url': ['url1', 'url2'], 'next_page': 'next_page_url'}
 
 
 class Spider(BaseSpider, MyParser):
@@ -59,39 +51,30 @@ class Spider(BaseSpider, MyParser):
 
     def start(self):
         callbacks = [
-            {'parser': self.parser_list_page, 'fetcher': self.get_list, 'result_pipeline': self.save_list},
-            {'parser': self.parser_content_page, 'fetcher': self.get_content},
+            {'parser': self.parser_list_page, 'fetcher': [self.get_list, self.get_content]},
+            {'parser': self.parser_content_page, },
         ]
 
         return self.request(
             url='http://blog.vincentzhong.cn/',
-            method='GET',
-            headers='',
-            # meta to save somethings
-            meta='',
             callback=callbacks,
         )
 
     def get_list(self, item):
         callbacks = [
-            {'parser': self.parser_content_page, 'fetcher': self.get_content},
-            {'parser': self.parser_list_page, 'fetcher': self.get_list, 'result_pipeline': self.save_list}
+            {'parser': self.parser_content_page, },
+            {'parser': self.parser_list_page, 'fetcher': [self.get_list, self.get_content], }
         ]
         return self.request(
             url=item['next_page'],
             callback=callbacks,
-            # meta=items['meta'],
         )
 
     def get_content(self, item):
-        requests = []
-        for url, title in item[0]:
-            requests.append(self.request(
-                url=url,
-                callback={'result_pipeline': self.save_content}
-            ))
-
-        return requests
+        return [self.request(
+            url=url,
+            callback=[{'parser': self.parser_content_page}]
+        ) for url in item['content_url']]
 
 
 if __name__ == '__main__':

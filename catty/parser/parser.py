@@ -6,20 +6,14 @@
 # Created on 2017/2/26 10:05
 import asyncio
 import inspect
-import time
 import traceback
 from copy import deepcopy
 from queue import PriorityQueue
 
+from catty.config import CONFIG
 from catty.exception import *
+from catty.libs.handle_module import SpiderModuleHandle
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
-
-try:
-    import uvloop
-
-    LOOP = uvloop.uvloop.new_event_loop()
-except ImportError:
-    LOOP = asyncio.get_event_loop()
 
 
 class Parser(object):
@@ -28,7 +22,7 @@ class Parser(object):
     def __init__(self,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
-                 loop=LOOP,
+                 loop,
                  ):
 
         self.downloader_parser_queue = downloader_parser_queue
@@ -40,6 +34,9 @@ class Parser(object):
         self.inner_ou_q = PriorityQueue()
 
         self.loop = loop
+
+        self.spider_module_handle = SpiderModuleHandle(CONFIG['SPIDER_PATH'])
+        self.spider_module_handle.to_instance_spider()
 
     async def conn_redis(self):
         """conn the redis"""
@@ -72,15 +69,22 @@ class Parser(object):
             task
         )
 
-    def _run_ins_func(self, func, task):
+    def _run_ins_func(self, spider_name, method_name, task):
         """run the spider_ins boned method to parser it and return a item,and append it to self._task"""
         _response = task['response']
-        _signature = inspect.signature(func).parameters
+        try:
+            spider_ins = self.spider_module_handle.spider_instantiation[spider_name]
+        except IndexError:
+            print('No this Spider or had not instance')
+
+        method = spider_ins.__getattribute__(method_name)
+
+        _signature = inspect.signature(method).parameters
         assert 'response' in _signature
         if 'task' in _signature:
-            parser_return = func(_response, task=task)
+            parser_return = method(_response, task=task)
         else:
-            parser_return = func(_response)
+            parser_return = method(_response)
 
         # if return a dict(normal)
         if isinstance(parser_return, dict):
@@ -95,28 +99,36 @@ class Parser(object):
             return
 
         callback = task['callback']
-        for each_callback in callback:
+        spider_name = task['spider_name']
+        for callback_method_name in callback:
             each_task = deepcopy(task)
-            parser_func = each_callback.get('parser', None)
+            parser_method_name = callback_method_name.get('parser', None)
             # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
-            if parser_func:
+            if parser_method_name:
                 try:
-                    self._run_ins_func(parser_func, each_task)
+                    self._run_ins_func(spider_name, parser_method_name, each_task)
                 except Retry_current_task:
                     # handle it like a new task
                     self.inner_ou_q.put(each_task)
                 except:
                     traceback.print_exc()
-                    pass
 
-    async def _loop(self):
-        __c__ = 0
-        while not self.downloader_parser_queue and __c__ < self._count_pre_loop:
-            __c__ += 1
+    async def _feed_parser(self):
+        while True:
             await self.load_task()
+
+    def feee_parser(self):
+        self.loop.create_task(self._feed_parser())
+        self.loop.run_forever()
+
+    def run_parser(self):
+        while True:
             self.make_tasks()
 
     def run(self):
-        while True:
-            self._loop()
-            time.sleep(self.LOAD_SPIDER_INTERVAL)
+        import threading
+        # t1 = threading.Thread(target=self.feed_parser)
+        t2 = threading.Thread(target=self.run_parser)
+
+        # t1.start()
+        t2.start()

@@ -79,6 +79,9 @@ class Request(object):
     def __str__(self):
         return str(Request.dump_request(self))
 
+    def __repr__(self):
+        return str(Request.dump_request(self))
+
 
 if __name__ == '__main__':
     r = Request(url='http://www.baidu.com/fxxk?start=10&end=20')

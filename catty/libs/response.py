@@ -65,3 +65,6 @@ class Response(object):
 
     def __str__(self):
         return str(Response.dump_request(self))
+
+    def __repr__(self):
+        return str(Response.dump_request(self))

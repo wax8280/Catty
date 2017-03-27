@@ -85,7 +85,6 @@ class Parser(object):
             self.push_task()
         )
 
-
     async def push_task(self):
         """put TASK from Parser own queue to parser-scheduler queue"""
         try:
@@ -170,13 +169,9 @@ class Parser(object):
                 except:
                     traceback.print_exc()
 
-    async def _feed_parser(self):
-        while True:
-            await self.load_task()
-
-    def feee_parser(self):
-        self.loop.create_task(self._feed_parser())
-        self.loop.run_forever()
+    def run_async_queue(self):
+        self.loop.create_task(self.push_task())
+        self.loop.create_task(self.load_task())
 
     def run_parser(self):
         while True:
@@ -184,8 +179,10 @@ class Parser(object):
 
     def run(self):
         import threading
-        # t1 = threading.Thread(target=self.feed_parser)
+        t1 = threading.Thread(target=self.run_async_queue)
         t2 = threading.Thread(target=self.run_parser)
 
-        # t1.start()
+        t1.start()
         t2.start()
+
+        self.loop.run_forever()

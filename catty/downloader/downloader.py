@@ -98,5 +98,6 @@ class DownLoader(object):
             self.start_crawler()
         )
 
-    def loop(self):
+    def run(self):
+        self.loop.create_task(self.start_crawler())
         self.loop.run_forever()

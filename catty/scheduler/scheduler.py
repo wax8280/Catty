@@ -131,9 +131,9 @@ class Scheduler(object):
         self.loop.create_task(
             self.load_task()
         )
-        self.loop.create_task(
-            self.push_task()
-        )
+        # self.loop.create_task(
+        #     self.push_task()
+        # )
 
     async def push_task(self):
         """ push task to scheduler-downloader queue in a loop"""
@@ -171,9 +171,9 @@ class Scheduler(object):
         self.loop.create_task(
             self.push_task()
         )
-        self.loop.create_task(
-            self.load_task()
-        )
+        # self.loop.create_task(
+        #     self.load_task()
+        # )
 
     # ---------------------------------------------------------
 

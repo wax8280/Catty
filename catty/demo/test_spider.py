@@ -8,7 +8,6 @@ from catty.parser.base_parser import BaseParser
 from catty.spider.base_spider import BaseSpider
 from pyquery import PyQuery
 
-
 class MyParser(BaseParser):
     def parser_content_page(self, response):
         pq = PyQuery(response.body)

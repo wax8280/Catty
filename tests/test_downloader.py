@@ -13,16 +13,6 @@ from catty.downloader.downloader import DownLoader
 from catty.libs.request import Request
 
 
-class Test(asynctest.TestCase):
-    use_default_loop = True
-
-    async def setUp(self):
-        pass
-
-    async def tearDown(self):
-        pass
-
-
 def test_downloader():
     loop = uvloop.new_event_loop()
     scheduler_downloader_queue = AsyncRedisPriorityQueue('test:sd', loop, queue_maxsize=10000)
@@ -34,9 +24,9 @@ def test_downloader():
     downloader = DownLoader(scheduler_downloader_queue, downloader_parser_queue, loop)
 
     async def put_test_data():
-        for i in range(10):
+        for i in range(10000):
             task = {
-                'request': str(Request(url='http://blog.vincentzhong.cn/a={}'.format(i))),
+                'request': Request(url='http://127.0.0.1:8000?a={}'.format(i)),
                 'priority': 1
             }
             await scheduler_downloader_queue.put(task)

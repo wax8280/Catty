@@ -14,7 +14,7 @@ loop = asyncio.get_event_loop()
 scheduler_downloader_queue = AsyncRedisPriorityQueue('MySpider:SD', loop=loop)
 parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=loop)
 scheduler = Scheduler(
-    parser_scheduler_queue,
+    scheduler_downloader_queue,
     parser_scheduler_queue,
     loop=loop
 )

@@ -5,6 +5,7 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 19:20
 import time
+import asyncio
 
 import aiohttp
 from aiohttp import BaseConnector
@@ -12,13 +13,14 @@ from aiohttp import BaseConnector
 from catty.libs.response import Response
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 
-
+LOAD_QUEUE_SLEEP = 0.5
 class Crawler(object):
     @staticmethod
     async def _request(aio_request: dict, loop, connector: BaseConnector):
         """The real request"""
         t_ = time.time()
-        async with aiohttp.request(**aio_request, loop=loop, connector=connector) as client:
+        print('[Downloader]Getting! {}'.format(aio_request))
+        async with aiohttp.request(**aio_request.dump_request(), loop=loop, connector=connector) as client:
             # TODO try it
             response = {
                 # TODO text accept encoding param to encode the body
@@ -93,10 +95,17 @@ class DownLoader(object):
                     out_q=self.downloader_parser_queue)
             )
 
-        # call myself
-        self.loop.create_task(
-            self.start_crawler()
-        )
+            # call myself
+            self.loop.create_task(
+                self.start_crawler()
+            )
+        else:
+            await asyncio.sleep(LOAD_QUEUE_SLEEP,loop=self.loop)
+            # call myself
+            self.loop.create_task(
+                self.start_crawler()
+            )
+
 
     def run(self):
         self.loop.create_task(self.start_crawler())

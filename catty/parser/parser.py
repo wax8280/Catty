@@ -14,7 +14,7 @@ from catty.exception import *
 from catty.libs.handle_module import SpiderModuleHandle
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 
-LOAD_QUEUE_SLEEP = 1
+LOAD_QUEUE_SLEEP = 0.5
 
 
 class Parser(object):
@@ -52,7 +52,7 @@ class Parser(object):
         try:
             t = await self.downloader_parser_queue.get()
         except AsyncQueueEmpty:
-            print('[load_task]Redis Queue is empty')
+            # print('[load_task]Redis Queue is empty')
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             self.loop.create_task(
                 self.load_task()
@@ -72,12 +72,13 @@ class Parser(object):
                 self.inner_in_q.put_nowait(t)
                 done = True
             except QueueFull:
-                print('[load_task]inner queue is full.')
+                # print('[load_task]inner queue is full.')
+                pass
             except Exception:
                 traceback.print_exc()
                 await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
 
-        print('[load_task]Load item')
+        # print('[load_task]Load item')
         self.loop.create_task(
             self.load_task()
         )
@@ -90,7 +91,7 @@ class Parser(object):
         try:
             t = self.inner_ou_q.get_nowait()
         except QueueEmpty:
-            print('[push_task]inner queue is empty.')
+            # print('[push_task]inner queue is empty.')
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             self.loop.create_task(
                 self.push_task()
@@ -111,13 +112,13 @@ class Parser(object):
                 done = True
             except AsyncQueueFull:
                 traceback.print_exc()
-                print('[push_task]Redis queue is full')
+                # print('[push_task]Redis queue is full')
                 await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             except Exception as e:
                 traceback.print_exc()
                 await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
 
-        print('[push_task]Push item')
+        # print('[push_task]Push item')
         self.loop.create_task(
             self.push_task()
         )
@@ -150,7 +151,7 @@ class Parser(object):
     def make_tasks(self):
         """get old task from self._task_from_downloader and make new task to append it to self._task_to_scheduler"""
         try:
-            task = self.inner_in_q.get()
+            task = self.inner_in_q.get()[1]
         except IndexError:
             return
 

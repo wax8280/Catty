@@ -21,7 +21,7 @@ STARTED = 1
 READY_TO_START = 2
 STOP = 3
 
-LOAD_QUEUE_SLEEP = 2
+LOAD_QUEUE_SLEEP = 0.5
 SELECTOR_SLEEP = 3
 
 
@@ -58,6 +58,8 @@ class Scheduler(object):
 
         self.spider_module_handle = SpiderModuleHandle(CONFIG['SPIDER_PATH'])
         # self.spider_module_handle.to_instance_spider()
+
+        self.instantiate_spider()
 
     def instantiate_spider(self):
         """instantiate all spider which had loaded and not instantiated"""
@@ -99,7 +101,7 @@ class Scheduler(object):
         try:
             t = await self.parser_scheduler_queue.get()
         except AsyncQueueEmpty:
-            print('[load_task]Redis Queue is empty')
+            # print('[load_task]Redis Queue is empty')
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             self.loop.create_task(
                 self.load_task()
@@ -119,7 +121,8 @@ class Scheduler(object):
                 self.task_from_parser.put_nowait(t)
                 done = True
             except QueueFull:
-                print('[load_task]inner queue is full.')
+                # print('[load_task]inner queue is full.')
+                pass
             except Exception:
                 traceback.print_exc()
                 await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
@@ -128,16 +131,16 @@ class Scheduler(object):
         self.loop.create_task(
             self.load_task()
         )
-        self.loop.create_task(
-            self.push_task()
-        )
+        # self.loop.create_task(
+        #     self.push_task()
+        # )
 
     async def push_task(self):
         """ push task to scheduler-downloader queue in a loop"""
         try:
             t = self.selected_task.get_nowait()
         except QueueEmpty:
-            print('[push_task]inner queue is empty.')
+            # print('[push_task]inner queue is empty.')
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             self.loop.create_task(
                 self.push_task()
@@ -158,7 +161,7 @@ class Scheduler(object):
                 done = True
             except AsyncQueueFull:
                 traceback.print_exc()
-                print('[push_task]Redis queue is full')
+                # print('[push_task]Redis queue is full')
                 await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             except Exception as e:
                 traceback.print_exc()
@@ -168,9 +171,9 @@ class Scheduler(object):
         self.loop.create_task(
             self.push_task()
         )
-        self.loop.create_task(
-            self.load_task()
-        )
+        # self.loop.create_task(
+        #     self.load_task()
+        # )
 
     # ---------------------------------------------------------
 
@@ -207,7 +210,7 @@ class Scheduler(object):
         try:
             task = self.task_from_parser.get(timeout=3)
         except QueueEmpty:
-            print('[make_tasks][QueueEmpty]')
+            # print('[make_tasks][QueueEmpty]')
             return
 
         callback = task['callback']

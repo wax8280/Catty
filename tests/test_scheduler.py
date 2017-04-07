@@ -6,8 +6,6 @@
 # Created on 2017/2/25 10:30
 
 import asyncio
-import threading
-import time
 import unittest
 
 import asynctest
@@ -96,10 +94,10 @@ class TestAsyncScheduler(asynctest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.scheduler_downloader_queue = AsyncRedisPriorityQueue('MySpider:SD', loop=cls.loop)
-        cls.parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=cls.loop)
+        cls.scheduler_downloader_queue = AsyncRedisPriorityQueue('Catty:SD', loop=cls.loop)
+        cls.parser_scheduler_queue = AsyncRedisPriorityQueue('Catty:PS', loop=cls.loop)
         cls.scheduler = Scheduler(
-            cls.parser_scheduler_queue,
+            cls.scheduler_downloader_queue,
             cls.parser_scheduler_queue,
             loop=cls.loop
         )
@@ -110,7 +108,8 @@ class TestAsyncScheduler(asynctest.TestCase):
         await self.parser_scheduler_queue.conn()
 
     async def tearDown(self):
-        pass
+        await self.scheduler_downloader_queue.clear()
+        await self.parser_scheduler_queue.clear()
 
     async def test_load_test(self):
         await self.parser_scheduler_queue.put({'test1': 'testing1'})
@@ -118,50 +117,94 @@ class TestAsyncScheduler(asynctest.TestCase):
         await self.parser_scheduler_queue.put({'test3': 'testing3'})
 
         # ----------------test--------------------
-        await self.scheduler.load_task()
+
         self.assertEqual(
-            self.scheduler.task_from_parser.get(),
+            await self.scheduler.load_task(),
             {'test1': 'testing1'}
         )
-        await self.scheduler.load_task()
         self.assertEqual(
-            self.scheduler.task_from_parser.get(),
+            await self.scheduler.load_task(),
             {'test2': 'testing2'}
         )
-        await self.scheduler.load_task()
+
         self.assertEqual(
-            self.scheduler.task_from_parser.get(),
+            await self.scheduler.load_task(),
             {'test3': 'testing3'}
         )
 
     async def test_push_task(self):
-        self.scheduler.selected_task.put((1, {'test1': 'testing1'}))
-        self.scheduler.selected_task.put((2, {'test2': 'testing2'}))
-        self.scheduler.selected_task.put((3, {'test3': 'testing3'}))
-
-        await self.scheduler.push_task()
-        await self.scheduler.push_task()
-        await self.scheduler.push_task()
-
-        self.assertEqual(
-            await self.scheduler.scheduler_downloader_queue.get(),
+        await self.scheduler.push_task(
+            self.scheduler_downloader_queue,
             (1, {'test1': 'testing1'})
         )
-        self.assertEqual(
-            await self.scheduler.scheduler_downloader_queue.get(),
+        await self.scheduler.push_task(
+            self.scheduler_downloader_queue,
             (2, {'test2': 'testing2'})
         )
-        self.assertEqual(
-            await self.scheduler.scheduler_downloader_queue.get(),
+        await self.scheduler.push_task(
+            self.scheduler_downloader_queue,
             (3, {'test3': 'testing3'})
         )
 
+        # ----------------test--------------------
+
+        self.assertEqual(
+            await self.scheduler.scheduler_downloader_queue.get(),
+            {'test3': 'testing3'}
+        )
+        self.assertEqual(
+            await self.scheduler.scheduler_downloader_queue.get(),
+            {'test2': 'testing2'}
+        )
+        self.assertEqual(
+            await self.scheduler.scheduler_downloader_queue.get(),
+            {'test1': 'testing1'}
+        )
+
+    async def test_push_task_to_request_queue(self):
+        spider_name = 'test'
+        spider_requests_q = AsyncRedisPriorityQueue('{}:requests'.format(spider_name), loop=self.loop)
+        await spider_requests_q.conn()
+        await spider_requests_q.clear()
+
+        await self.scheduler._push_task_to_request_queue((1, {'request1': 'test'}), spider_name)
+        await self.scheduler._push_task_to_request_queue((2, {'request2': 'test'}), spider_name)
+
+        # ----------------test--------------------
+
+        self.assertEqual(
+            await spider_requests_q.get(),
+            {'request2': 'test'}
+        )
+
+        self.assertEqual(
+            await spider_requests_q.get(),
+            {'request1': 'test'}
+        )
+        await spider_requests_q.clear()
+
+    async def test_run_ins_func(self):
+        spider_name = 'spider'
+        spider_requests_q = AsyncRedisPriorityQueue('{}:requests'.format(spider_name), loop=self.loop)
+        await spider_requests_q.conn()
+        await spider_requests_q.clear()
+
+        await self.scheduler._run_ins_func(spider_name, 'start')
+        task = await spider_requests_q.get()
+        self.assertEqual(task['request']['url'], 'http://blog.vincentzhong.cn/')
+
+        await self.scheduler._run_ins_func(spider_name, 'get_list', item={'next_page': 'http://www.next_page.com'})
+        task = await spider_requests_q.get()
+        self.assertEqual(task['request']['url'], 'http://www.next_page.com')
+
 
 if __name__ == '__main__':
+    import threading
+
     loop = asyncio.get_event_loop()
 
-    scheduler_downloader_queue = AsyncRedisPriorityQueue('MySpider:SD', loop=loop)
-    parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=loop)
+    scheduler_downloader_queue = AsyncRedisPriorityQueue('Catty:SD', loop=loop)
+    parser_scheduler_queue = AsyncRedisPriorityQueue('Catty:PS', loop=loop)
 
     loop.run_until_complete(scheduler_downloader_queue.conn())
     loop.run_until_complete(parser_scheduler_queue.conn())
@@ -171,45 +214,16 @@ if __name__ == '__main__':
         parser_scheduler_queue,
         loop
     )
-
     scheduler.instantiate_spider()
 
-    async def put_task():
-        for c in range(10):
-            await parser_scheduler_queue.put(PriorityDict({
-                'test{}'.format(c): 'testing',
-                'priority': c
-            }))
+    loop.create_task(scheduler.run())
+    loop.run_forever()
 
-
-    def test_run_async_queue():
-        # 该测试看起来并没有真正实现异步，其实是因为
-        def mock_select():
-            while True:
-                scheduler.selected_task.put(
-                    # 略过old task - new task 的过程
-                    scheduler.task_from_parser.get()
-                )
-
-        t1 = threading.Thread(target=scheduler.run_async_queue())
-        t2 = threading.Thread(target=mock_select)
-        t1.start()
-        t2.start()
-
-        loop.create_task(put_task())
-        loop.run_forever()
-
-    test_run_async_queue()
-
-    def test_run():
-        t1 = threading.Thread(target=scheduler.run_async_queue)
-        t2 = threading.Thread(target=scheduler.run_task_maker)
-        t3 = threading.Thread(target=scheduler.run_selector)
-
-        t1.start()
-        t2.start()
-        t3.start()
-
-        loop.run_forever()
-
-    # test_run()
+    # t1 = threading.Thread(target=scheduler.run())
+    #
+    # async def mock_selector():
+    #     for c in range(10):
+    #         await parser_scheduler_queue.put(PriorityDict({
+    #             'test{}'.format(c): 'testing',
+    #             'priority': c
+    #         }))

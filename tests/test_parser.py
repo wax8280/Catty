@@ -44,69 +44,10 @@ class TestParser(asynctest.TestCase):
     async def tearDown(self):
         pass
 
-    async def test_load_task(self):
-        task = deepcopy(self.task)
-        # downloader
-        task.update({
-            'tid': 1,
-            'response': Response(
-                status=200,
-                method='GET',
-                headers={'header': 'header'},
-                use_time=0.5,
-                cookies={'cookies': 'cookies'},
-                content_type='ct',
-                charset='c',
-                body='hello world'
-            )
-        })
-
-        await self.downloader_parser_queue.put(task)
-
-        # -----------------test-------------------
-        await self.parser.load_task()
-        self.assertEqual(
-            self.parser.inner_in_q.get()['tid'],
-            1
-        )
-
-    async def test_push_task(self):
-        task = deepcopy(self.task)
-        # downloader
-        task.update({
-            'tid': 2,
-            'response': Response(
-                status=200,
-                method='GET',
-                headers={'header': 'header'},
-                use_time=0.5,
-                cookies={'cookies': 'cookies'},
-                content_type='ct',
-                charset='c',
-                body='hello world'
-            )
-        })
-
-        await self.downloader_parser_queue.put(task)
-
-        # -----------------test-------------------
-        await self.parser.load_task()
-
-        self.parser.inner_ou_q.put(
-            self.parser.inner_in_q.get()
-        )
-
-        await self.parser.push_task()
-
-        result = await self.parser_scheduler_queue.get()
-        self.assertEqual(
-            result['tid'],
-            2
-        )
-
     async def test_make_tasks(self):
         task = deepcopy(self.task)
-        # downloader
+
+        # mock downloader
         task.update({
             'tid': 2,
             'response': Response(
@@ -124,14 +65,15 @@ class TestParser(asynctest.TestCase):
         await self.downloader_parser_queue.put(task)
 
         # -----------------test-------------------
-        await self.parser.load_task()
-        self.parser.make_tasks()
+        await self.parser.make_tasks()
+        task = await self.parser.parser_scheduler_queue.get()
+        task_2 = await self.parser.parser_scheduler_queue.get()
         self.assertEqual(
-            self.parser.inner_ou_q.get()['parser']['item']['content_url'],
+            task['parser']['item']['content_url'],
             ['url1', 'url2']
         )
         self.assertEqual(
-            self.parser.inner_ou_q.get()['parser']['item']['content'],
+            task_2['parser']['item']['content'],
             'content in parser_content_page'
         )
 

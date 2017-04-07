@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import logging
+import sys
 import os
 from logging.handlers import WatchedFileHandler
 from catty.config import CONFIG
@@ -36,10 +37,10 @@ class BaseLog(object):
             file_handler = WatchedFileHandler(
                 os.path.join(failed_path, logger_name + '.log'))
             file_handler.setFormatter(formatter)
-            # stream_handler = logging.StreamHandler(sys.stdout)
-            # stream_handler.setFormatter(formatter)
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
-            # logger.addHandler(stream_handler)
+            logger.addHandler(stream_handler)
             logger.setLevel(logging.DEBUG)
             BaseLog.logger_dict[logger_name] = logger
         return BaseLog.logger_dict[logger_name]

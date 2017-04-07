@@ -163,6 +163,9 @@ class BaseAsyncQueue(object):
         self.redis_conn = None
         self.pool_maxsize = pool_maxsize
 
+    def __repr__(self):
+        return self.name
+
     async def conn_pool(self):
         if not self.redis_pool:
             self.redis_pool = await aioredis.create_pool(

@@ -232,6 +232,10 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         if is_full:
             raise self.Full
 
-        priority = -get_default(item, 'priority', 0)
+        if isinstance(item, tuple):
+            priority = -item[0]
+            item = item[1]
+        else:
+            priority = -get_default(item, 'priority', 0)
         await self.redis_conn.zadd(self.name, priority, pickle.dumps(item))
         return True

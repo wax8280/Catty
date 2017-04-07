@@ -7,7 +7,6 @@
 import inspect
 import traceback
 from copy import deepcopy
-from queue import PriorityQueue
 
 from catty.config import CONFIG
 from catty.exception import *
@@ -27,8 +26,9 @@ class Parser(object):
         self.downloader_parser_queue = downloader_parser_queue
         self.parser_scheduler_queue = parser_scheduler_queue
 
-        self.inner_in_q = PriorityQueue()
-        self.inner_ou_q = PriorityQueue()
+        self.spider_started = set()
+        self.spider_stopped = set()
+        self.spider_paused = set()
 
         self.loop = loop
 
@@ -107,30 +107,38 @@ class Parser(object):
         # if return a dict(normal)
         if isinstance(parser_return, dict):
             task['parser'].update({'item': parser_return})
-            await self.push_task(self.parser_scheduler_queue,task)
+            await self.push_task(self.parser_scheduler_queue, task)
 
     async def make_tasks(self):
         """get old task from self._task_from_downloader and make new task to append it to self._task_to_scheduler"""
         self.logger.log_it(message="[make_tasks]", level='INFO')
 
         task = await self.load_task()
+        if task:
+            if task['spider_name'] in self.spider_started:
+                callback = task['callback']
+                spider_name = task['spider_name']
+                for callback_method_name in callback:
+                    # number of task that parser return depend on the number of callbacks
+                    each_task = deepcopy(task)
+                    parser_method_name = callback_method_name.get('parser', None)
 
-        callback = task['callback']
-        spider_name = task['spider_name']
-        for callback_method_name in callback:
-            # number of task that parser return depend on the number of callbacks
-            each_task = deepcopy(task)
-            parser_method_name = callback_method_name.get('parser', None)
+                    # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
+                    if parser_method_name:
+                        try:
+                            await self._run_ins_func(spider_name, parser_method_name, each_task)
+                        except Retry_current_task:
+                            # handle it like a new task
+                            await self.push_task(self.parser_scheduler_queue, each_task)
+                        except:
+                            traceback.print_exc()
 
-            # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
-            if parser_method_name:
-                try:
-                    await self._run_ins_func(spider_name, parser_method_name, each_task)
-                except Retry_current_task:
-                    # handle it like a new task
-                    await self.push_task(self.parser_scheduler_queue,each_task)
-                except:
-                    traceback.print_exc()
+            elif task['spider_name'] in self.spider_paused:
+                # 持久化
+                pass
+            elif task['spider_name'] in self.spider_stopped:
+                # 抛弃
+                pass
 
         self.loop.create_task(
             self.make_tasks()

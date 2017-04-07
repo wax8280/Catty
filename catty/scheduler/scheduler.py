@@ -6,22 +6,25 @@
 # Created on 2017/2/24 13:14
 
 import threading
-import time
 import traceback
 
 from catty.config import CONFIG
 from catty.exception import *
 from catty.libs.handle_module import SpiderModuleHandle
+from catty.libs.utils import get_default
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
+from catty.scheduler.selector import Selector
 from catty.scheduler.tasker import Tasker
 
 NOTSTART = 0
 STARTED = 1
 READY_TO_START = 2
 STOP = 3
+PAUSE = 4
 
 LOAD_QUEUE_SLEEP = 0.5
 SELECTOR_SLEEP = 3
+REQUEST_QUEUE_FORMAT = "{}:requests"
 
 
 class Scheduler(object):
@@ -39,7 +42,8 @@ class Scheduler(object):
 
         self.tasker = Tasker()
 
-        self.spider_stoped = set()
+        self.spider_stopped = set()
+        self.spider_paused = set()
         self.spider_started = set()
 
         # schema
@@ -53,8 +57,15 @@ class Scheduler(object):
 
         self.spider_module_handle = SpiderModuleHandle(CONFIG['SPIDER_PATH'])
         # self.spider_module_handle.to_instance_spider()
-
         self.instantiate_spider()
+
+        self.selector = Selector(
+            {spider_name: get_default(self.spider_module_handle.spider_instantiation[spider_name], 'speed', 1)
+             for spider_name in self.loaded_spider.keys()},
+            scheduler_downloader_queue,
+            self.requests_queue,
+            self.loop
+        )
 
     def instantiate_spider(self):
         """instantiate all spider which had loaded and not instantiated"""
@@ -66,48 +77,24 @@ class Scheduler(object):
                 continue
             self.loaded_spider.update({spider_name: {'status': READY_TO_START}})
 
-    # ---------------------Thread async queue-----------------
-    def select_task(self):
-        """base on the exetime select the task to push"""
-        all_task = []
-        # TODO 暂时没有找到好的遍历队列的方法
-        # 全部出队
-        try:
-            while True:
-                all_task.append(self.task_to_downloader.get_nowait())
-        except:
-            pass
-
-        # 遍历队列
-        for each_task in all_task:
-            if time.time() - each_task['scheduler']['exetime'] > 0:
-                print('[select_task]Select tid:{}'.format(each_task['tid']))
-                self.selected_task.put(each_task)
-            else:
-                # 未到执行时间的，重新翻入队列中
-                self.task_to_downloader.put(each_task)
-        time.sleep(SELECTOR_SLEEP)
-
-    # --------------------------------------------------------
-
-    async def load_task(self):
+    async def load_task(self, q):
         """load item from parser-scheduler queue"""
         try:
-            t = await self.parser_scheduler_queue.get()
-            print('[load_task]Load item')
+            t = await q.get()
+            print('[load_task]Load item from {}'.format(q))
             return t
         except AsyncQueueEmpty:
             # print('[load_task]Redis Queue is empty')
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             self.loop.create_task(
-                self.load_task()
+                self.load_task(q)
             )
             return
         except Exception:
             traceback.print_exc()
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
             self.loop.create_task(
-                self.load_task()
+                self.load_task(q)
             )
             return
 
@@ -133,8 +120,8 @@ class Scheduler(object):
     async def _push_task_to_request_queue(self, request, spider_name):
         """make the task from request and append it to self._task_to_downloader"""
         request_q = self.requests_queue.setdefault(
-            "{}:requests".format(spider_name),
-            AsyncRedisPriorityQueue("{}:requests".format(spider_name), loop=self.loop)
+            REQUEST_QUEUE_FORMAT.format(spider_name),
+            AsyncRedisPriorityQueue(REQUEST_QUEUE_FORMAT.format(spider_name), loop=self.loop)
         )
         await request_q.conn()
         await self.push_task(request_q, request)
@@ -175,42 +162,51 @@ class Scheduler(object):
                         'start'
                     )
                     value['status'] = STARTED
+                    self.spider_started.add(spider_name)
                 except:
                     # TODO 这里捕获所有用户编写的spider里面的错误
                     traceback.print_exc()
 
-        task = await self.load_task()
+        task = await self.load_task(self.parser_scheduler_queue)
         if task:
-            callback = task['callback']
-            spider_name = task['spider_name']
+            if task['spider_name'] in self.spider_started:
+                callback = task['callback']
+                spider_name = task['spider_name']
 
-            for callback_method_name in callback:
-                fetcher_method_name = callback_method_name.get('fetcher', None)
-                item = task['parser']['item']
+                for callback_method_name in callback:
+                    fetcher_method_name = callback_method_name.get('fetcher', None)
+                    item = task['parser']['item']
 
-                if fetcher_method_name:
-                    if not isinstance(fetcher_method_name, list):
-                        fetcher_method_name = [fetcher_method_name]
+                    if fetcher_method_name:
+                        if not isinstance(fetcher_method_name, list):
+                            fetcher_method_name = [fetcher_method_name]
 
-                    # a task can have many fetcher callbacks
-                    for each_fetcher_method_name in fetcher_method_name:
-                        try:
-                            # 这里重新生成一个task，如果用户需要保存上一个task的数据（例如meta）必须自己手动处理
-                            print('[make_tasks] {}.{} making task'.format(spider_name, each_fetcher_method_name))
-                            await self._run_ins_func(
-                                spider_name,
-                                each_fetcher_method_name,
-                                item
-                            )
-                        except:
-                            # TODO 这里捕获所有用户编写的spider里面的错误
-                            traceback.print_exc()
-                            # TODO 这里去重
+                        # a task can have many fetcher callbacks
+                        for each_fetcher_method_name in fetcher_method_name:
+                            try:
+                                # 这里重新生成一个task，如果用户需要保存上一个task的数据（例如meta）必须自己手动处理
+                                print('[make_tasks] {}.{} making task'.format(spider_name, each_fetcher_method_name))
+                                await self._run_ins_func(
+                                    spider_name,
+                                    each_fetcher_method_name,
+                                    item
+                                )
+                            except:
+                                # TODO 这里捕获所有用户编写的spider里面的错误
+                                traceback.print_exc()
+                                # TODO 这里去重
+            elif task['spider_name'] in self.spider_paused:
+                # 持久化
+                pass
+            elif task['spider_name'] in self.spider_stopped:
+                # 抛弃
+                pass
 
         self.loop.create_task(
             self.make_tasks()
         )
 
     def run(self):
+        self.loop.create_task(self.selector.select_task())
         self.loop.create_task(self.make_tasks())
         self.loop.run_forever()

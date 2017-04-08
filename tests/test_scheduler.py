@@ -136,17 +136,9 @@ if __name__ == '__main__':
         loop
     )
     scheduler.instantiate_spider()
+    scheduler.selector.loop = loop
+    scheduler.run()
 
-    def test_select_and_make_task():
-        async def test_select_task():
-            scheduler.selector.loop = loop
-            await scheduler.make_tasks()
-            await scheduler.selector.select_task()
-
-        loop.create_task(test_select_task())
-        loop.run_forever()
-
-    test_select_and_make_task()
     # t1 = threading.Thread(target=scheduler.run())
     #
     # async def mock_selector():

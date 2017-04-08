@@ -10,6 +10,7 @@ import traceback
 
 from catty.config import CONFIG
 from catty.exception import *
+from catty.handler import HandlerMixin
 from catty.libs.handle_module import SpiderModuleHandle
 from catty.libs.utils import get_default
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
@@ -27,13 +28,14 @@ SELECTOR_SLEEP = 3
 REQUEST_QUEUE_FORMAT = "{}:requests"
 
 
-class Scheduler(object):
+class Scheduler(HandlerMixin):
     LOAD_SPIDER_INTERVAL = 1
 
     def __init__(self,
                  scheduler_downloader_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
                  loop):
+        super(Scheduler, self).__init__('SCHEDULER')
         self.scheduler_downloader_queue = scheduler_downloader_queue
         self.parser_scheduler_queue = parser_scheduler_queue
         self.requests_queue = {}
@@ -202,11 +204,20 @@ class Scheduler(object):
                 # 抛弃
                 pass
 
+        print(self.spider_paused)
         self.loop.create_task(
             self.make_tasks()
         )
 
-    def run(self):
+    def run_scheduler(self):
         self.loop.create_task(self.selector.select_task())
         self.loop.create_task(self.make_tasks())
         self.loop.run_forever()
+
+    def run(self):
+        import threading
+        handler_server_thread = threading.Thread(target=self.run_handler)
+        handler_server_thread.start()
+        scheduler_thread = threading.Thread(target=self.run_scheduler)
+        scheduler_thread.start()
+

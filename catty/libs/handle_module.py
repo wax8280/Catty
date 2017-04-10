@@ -6,6 +6,7 @@
 # Created on 2017/3/15 21:39
 import importlib.util
 import os
+from catty.libs.log import Log
 
 
 def load_module(script_path, module_name):
@@ -47,6 +48,7 @@ class ModuleHandle:
         self.namespace = {}
 
     def load_new_module(self):
+        """Load the module which no in self.namespace"""
         self.spider_module_filename = search_in_dir(self.path, '.py')
 
         for each_module_filename in self.spider_module_filename:
@@ -60,28 +62,33 @@ class ModuleHandle:
                 # had load
                 pass
 
-    def load_all_module(self):
-        self.spider_module_filename = search_in_dir(self.path, '.py')
-
-        for each_module_filename in self.spider_module_filename:
-            path = os.path.join(self.path, each_module_filename)
-            spec, module = load_module(path, each_module_filename)
-            exec_module(spec, module)
-            self.namespace.update({each_module_filename: (spec, module)})
-            self.loaded_module_filename.add(each_module_filename)
-
-    def update_module(self):
-        self.spider_module_filename = search_in_dir(self.path, '.py')
-
-        # 添加
-        for each_not_loaded_module_filename in self.spider_module_filename:
-            if each_not_loaded_module_filename not in self.loaded_module_filename:
-                pass
-
         # 删除
+        to_remove = set()
         for each_loaded_module_filename in self.loaded_module_filename:
             if each_loaded_module_filename not in self.spider_module_filename:
-                pass
+                self.namespace.pop(each_loaded_module_filename)
+                to_remove.add(each_loaded_module_filename)
+        self.loaded_module_filename -= to_remove
+
+    def load_all_module(self):
+        """reload all moduel"""
+        self.spider_module_filename = search_in_dir(self.path, '.py')
+
+        for each_not_loaded_module_filename in self.spider_module_filename:
+            path = os.path.join(self.path, each_not_loaded_module_filename)
+            spec, module = load_module(path, each_not_loaded_module_filename)
+            exec_module(spec, module)
+
+            self.namespace.update({each_not_loaded_module_filename: (spec, module)})
+            self.loaded_module_filename.add(each_not_loaded_module_filename)
+
+        # 删除
+        to_remove = set()
+        for each_loaded_module_filename in self.loaded_module_filename:
+            if each_loaded_module_filename not in self.spider_module_filename:
+                self.namespace.pop(each_loaded_module_filename)
+                to_remove.add(each_loaded_module_filename)
+        self.loaded_module_filename -= to_remove
 
 
 class SpiderModuleHandle(ModuleHandle):
@@ -90,22 +97,30 @@ class SpiderModuleHandle(ModuleHandle):
 
         # spider_name:spider_instantiation
         self.spider_instantiation = {}
-        self.load_all_module()
+        self.logger = Log('SpiderModuleHandle')
 
-    def to_instance_spider(self):
+    def _load_spider(self):
         for file_name, value in self.namespace.items():
             spec, module = value
-            # TODO the spider name
             try:
                 spider_cls = getattr(module, 'Spider')
                 self.spider_instantiation.update({
                     spider_cls.name: spider_cls()
                 })
+                self.logger.log_it("[load_spider]Load spider name:{}".format(spider_cls.name), 'INFO')
             except Exception as e:
-                print(e)
+                self.logger.log_it("[load_spider]ErrInfo:{}".format(e), 'WARN')
+
+    def load_all_spider(self):
+        self.load_all_module()
+        self._load_spider()
+
+    def load_new_spider(self):
+        self.load_new_module()
+        self._load_spider()
 
 
 if __name__ == '__main__':
     spider_module_handle = SpiderModuleHandle('../../test_handle_module')
-    spider_module_handle.to_instance_spider()
+    spider_module_handle.load_all_spider()
     print(spider_module_handle.spider_instantiation)

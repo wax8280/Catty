@@ -5,7 +5,10 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 19:50
 import hashlib
+import pickle
+import os
 from furl import furl
+import sqlite3
 
 md5string = lambda x: hashlib.md5(utf8(x)).hexdigest()
 
@@ -43,7 +46,6 @@ def build_url(url):
     return f.url
 
 
-
 class PriorityDict(dict):
     def __eq__(self, other):
         return self['priority'] == other['priority']
@@ -61,6 +63,46 @@ def get_eventloop():
         return asyncio.get_event_loop()
 
 
+def dump_task(task, dump_path, dump_type, spider_name):
+    """mkdir & save task in sqlite"""
+    if not os.path.exists(os.path.join(dump_path, dump_type)):
+        os.mkdir(os.path.join(dump_path, dump_type))
+
+    path = os.path.join(os.path.join(dump_path, dump_type), spider_name)
+    if not os.path.exists(path):
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+        cursor.execute('CREATE TABLE dump_task (task_data VARCHAR(99999))')
+        conn.commit()
+    else:
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+
+        cursor.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
+    conn.commit()
+    conn.close()
+
+
+def load_task(dump_path, dump_type, spider_name, delete=False):
+    """load task in sqlite"""
+    path = os.path.join(os.path.join(dump_path, dump_type), spider_name)
+    if os.path.exists(path):
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT task_data FROM dump_task')
+
+        result = [pickle.loads(i[0]) for i in cursor]
+        if delete:
+            os.remove(path)
+        return result
+
+def set_safe_remove(s, k):
+    try:
+        s.remove(k)
+    except KeyError:
+        pass
+
+
 if __name__ == '__main__':
     # print(build_url('http://你好.世界/ドメイン.テスト'))
     # print(build_url('https://www.baidu.com/s?wd=墨迹'))
@@ -72,3 +114,6 @@ if __name__ == '__main__':
     foobar = PriorityDict({'priority': 20, 'name': 'foobar'})
     print(foobar == bar)
     print(foobar > bar)
+
+    # dump_task({'a': 'asd'}, './', 's', 'dd')
+    print(load_task('./', 's', 'dd'))

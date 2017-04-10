@@ -193,7 +193,7 @@ class BaseAsyncQueue(object):
 
 class AsyncRedisPriorityQueue(BaseAsyncQueue):
     def __init__(self, name, loop, host='localhost', port=6379, db=0,
-                 queue_maxsize=100, password=None, pool_maxsize=10):
+                 queue_maxsize=10000, password=None, pool_maxsize=10):
         """
         :param queue_maxsize:     队列的最大上限
         :return:

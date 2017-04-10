@@ -36,6 +36,7 @@ class Crawler(object):
                 # 'history': client.history,
                 'body': await client.read(),
                 'use_time': time.time() - t_,
+                'url': client.url,
             }
             return response
 

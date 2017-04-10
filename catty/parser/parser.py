@@ -5,37 +5,43 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 10:05
 import inspect
+import threading
 import traceback
+import time
+import os
 from copy import deepcopy
 
 from catty.config import CONFIG
 from catty.exception import *
+from catty.handler import HandlerMixin
 from catty.libs.handle_module import SpiderModuleHandle
 from catty.libs.log import Log
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
+from catty.libs.utils import dump_task, load_task
+from catty.message_queue.redis_queue import AsyncRedisPriorityQueue, get_task, push_task
+from catty import LOAD_QUEUE_SLEEP
 
-LOAD_QUEUE_SLEEP = 0.5
 
-
-class Parser(object):
+class Parser(HandlerMixin):
     def __init__(self,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
                  loop):
+        super(Parser, self).__init__()
+        self.name = 'Parser'
 
         self.downloader_parser_queue = downloader_parser_queue
         self.parser_scheduler_queue = parser_scheduler_queue
+        self.loop = loop
 
         self.spider_started = set()
         self.spider_stopped = set()
         self.spider_paused = set()
 
-        self.loop = loop
-
         self.spider_module_handle = SpiderModuleHandle(CONFIG['SPIDER_PATH'])
-        self.spider_module_handle.to_instance_spider()
+        self.spider_module_handle.load_all_spider()
 
         self.logger = Log('Parser')
+        self.is_dump_all_task = False
 
     async def conn_redis(self):
         """Conn the redis"""
@@ -43,77 +49,57 @@ class Parser(object):
         await self.parser_scheduler_queue.conn()
 
     async def load_task(self):
-        """load item from parser-scheduler queue"""
-        try:
-            t = await self.downloader_parser_queue.get()
-            self.logger.log_it(message="[load_task]Load item", level='INFO')
-            return t
-        except AsyncQueueEmpty:
-            # print('[load_task]Redis Queue is empty')
-            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
-            self.loop.create_task(
-                self.load_task()
-            )
-            return
-        except Exception:
-            traceback.print_exc()
-            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
-            self.loop.create_task(
-                self.load_task()
-            )
-            return
+        """load the persist task & push it to request-queue"""
+        # TODO dump downloader-parser queue
+        tasks = [load_task(CONFIG['DUMP_PATH'], 'parser_scheduler', spider_name) for spider_name in self.spider_started]
+        self.logger.log_it("[load_task]Load tasks:{}".format(tasks))
 
-    async def push_task(self, q, item):
-        """ push task to scheduler-downloader queue"""
+        if tasks and tasks[0] is not None:
+            for spider_tasks in tasks:
+                for each_task in spider_tasks:
+                    # push each task to parser-scheduler queue
+                    await push_task(self.parser_scheduler_queue, each_task, self.loop)
 
-        done = False
-        while not done:
-            try:
-                await q.put(item)
-                done = True
-            except AsyncQueueFull:
-                traceback.print_exc()
-                # print('[push_task]Redis queue is full')
-                await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
-            except Exception as e:
-                traceback.print_exc()
-                await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
-
-        self.logger.log_it(message="[push_task]Push item", level='INFO')
-        return True
+    async def dump_all_task(self):
+        # FIXME this method only called in exit
+        while await self.parser_scheduler_queue.qsize():
+            dump_task(await get_task(self.parser_scheduler_queue), CONFIG['DUMP_PATH'], 'parser_scheduler', 'Default')
+        self.is_dump_all_task = True
 
     async def _run_ins_func(self, spider_name, method_name, task):
-        """run the spider_ins boned method to parser it and return a item,and append it to self._task"""
-        self.logger.log_it(message="[_run_ins_func]", level='INFO')
+        """run the spider_ins boned method to parser it & push it to parser-request queue"""
+        self.logger.log_it(message="[_run_ins_func]Parser the {}.{}".format(spider_name, method_name), level='INFO')
         _response = task['response']
         try:
             spider_ins = self.spider_module_handle.spider_instantiation[spider_name]
         except IndexError:
             self.logger.log_it(message="[_run_ins_func]No this Spider or had not instance", level='WARN')
+            return
 
         # get the spider's method from name
         method = spider_ins.__getattribute__(method_name)
 
         # get the method'parms
         _signature = inspect.signature(method).parameters
-        assert 'response' in _signature
 
-        # TODO task to do somethings such as retrying etc... in the next version
-        if 'task' in _signature:
-            parser_return = method(_response, task=task)
+        if 'response' in _signature:
+            if 'task' in _signature:
+                # TODO task to do somethings such as retrying etc... in the next version
+                parser_return = method(_response, task=task)
+            else:
+                parser_return = method(_response)
+
+            # if return a dict(normal)
+            if isinstance(parser_return, dict):
+                task['parser'].update({'item': parser_return})
+                await push_task(self.parser_scheduler_queue, task, self.loop)
         else:
-            parser_return = method(_response)
-
-        # if return a dict(normal)
-        if isinstance(parser_return, dict):
-            task['parser'].update({'item': parser_return})
-            await self.push_task(self.parser_scheduler_queue, task)
+            self.logger.log_it(message="[_run_ins_func]A parser method must have a 'response' param.", level='WARN')
 
     async def make_tasks(self):
-        """get old task from self._task_from_downloader and make new task to append it to self._task_to_scheduler"""
-        self.logger.log_it(message="[make_tasks]", level='INFO')
-
-        task = await self.load_task()
+        """run the done task & push them"""
+        # FIXME as some as Scheduler
+        task = await get_task(self.downloader_parser_queue)
         if task:
             if task['spider_name'] in self.spider_started:
                 callback = task['callback']
@@ -123,27 +109,46 @@ class Parser(object):
                     each_task = deepcopy(task)
                     parser_method_name = callback_method_name.get('parser', None)
 
-                    # TODO 判断result_pipiline_func是否是可迭代的（可以是list）
                     if parser_method_name:
                         try:
                             await self._run_ins_func(spider_name, parser_method_name, each_task)
                         except Retry_current_task:
                             # handle it like a new task
-                            await self.push_task(self.parser_scheduler_queue, each_task)
+                            await push_task(self.parser_scheduler_queue, each_task, self.loop)
                         except:
                             traceback.print_exc()
-
             elif task['spider_name'] in self.spider_paused:
-                # 持久化
-                pass
+                # persist
+                dump_task(task, CONFIG['DUMP_PATH'], 'parser_scheduler', task['spider_name'])
             elif task['spider_name'] in self.spider_stopped:
-                # 抛弃
                 pass
+        else:
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
 
         self.loop.create_task(
             self.make_tasks()
         )
 
-    def run(self):
+    def run_parser(self):
         self.loop.create_task(self.make_tasks())
         self.loop.run_forever()
+
+    def run_persist(self):
+        self.loop.create_task(self.load_task())
+
+    def run(self):
+        try:
+            handler_server_thread = threading.Thread(target=self.run_handler)
+            handler_server_thread.start()
+            persist_thread = threading.Thread(target=self.run_persist)
+            persist_thread.start()
+            parser_thread = threading.Thread(target=self.run_parser)
+            parser_thread.start()
+            parser_thread.join()
+        except KeyboardInterrupt:
+            self.logger.log_it("[Ending]Doing the last thing...")
+            self.loop.create_task(self.dump_all_task())
+            while not self.is_dump_all_task:
+                time.sleep(1)
+            self.logger.log_it("Bye!")
+            os._exit(0)

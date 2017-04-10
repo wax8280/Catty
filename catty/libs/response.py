@@ -26,7 +26,7 @@
 
 
 class Response(object):
-    def __init__(self, status, method, cookies, headers, content_type, charset, body, use_time):
+    def __init__(self, status, method, cookies, headers, content_type, charset, body, use_time, url):
         self.status = status
         self.method = method
         self.headers = headers
@@ -35,9 +35,9 @@ class Response(object):
         self.charset = charset
         self.body = body
         self.use_time = use_time
+        self.url = url
 
         self.dumped_request = {}
-
 
     def __getitem__(self, item):
         return self.__getattribute__(item)
@@ -51,7 +51,8 @@ class Response(object):
             'method': self.method,
             'headers': self.headers,
             'body': self.body,
-            'use_time': self.use_time
+            'use_time': self.use_time,
+            'url': self.url
         }
 
         if self.cookies:

@@ -1,2 +1,9 @@
-SPIDER_PATH : '/home/vincent/PycharmProjects/Catty/catty/demo'
-LOG_PATH : '/home/vincent/PycharmProjects/Catty/catty/log'
+SPIDER_PATH : '../catty/demo'
+LOG_PATH : '../catty/log'
+DUMP_PATH : '../data/dump'
+
+PORT :
+  SCHEDULER : 38383
+  PARSER : 38384
+
+AUTHKEY : 'hello'

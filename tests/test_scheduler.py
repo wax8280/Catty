@@ -43,16 +43,16 @@ class TestAsyncScheduler(asynctest.TestCase):
         # ----------------test--------------------
 
         self.assertEqual(
-            await self.scheduler.load_task(),
+            await self.scheduler.get_task(),
             {'test1': 'testing1'}
         )
         self.assertEqual(
-            await self.scheduler.load_task(),
+            await self.scheduler.get_task(),
             {'test2': 'testing2'}
         )
 
         self.assertEqual(
-            await self.scheduler.load_task(),
+            await self.scheduler.get_task(),
             {'test3': 'testing3'}
         )
 
@@ -117,7 +117,7 @@ class TestAsyncScheduler(asynctest.TestCase):
         task = await spider_requests_q.get()
         self.assertEqual(task['request']['url'], 'http://blog.vincentzhong.cn/')
 
-        await self.scheduler._run_ins_func(spider_name, 'get_list', item={'next_page': 'http://www.next_page.com'})
+        await self.scheduler._run_ins_func(spider_name, 'get_list', task={'next_page': 'http://www.next_page.com'})
         task = await spider_requests_q.get()
         self.assertEqual(task['request']['url'], 'http://www.next_page.com')
 

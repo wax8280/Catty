@@ -10,20 +10,18 @@ import cProfile
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
 from catty.parser.parser import Parser
 
-def run():
-    loop = asyncio.get_event_loop()
-    downloader_parser_queue = AsyncRedisPriorityQueue('MySpider:DP', loop=loop)
-    parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=loop)
 
-    loop.run_until_complete(parser_scheduler_queue.conn())
-    loop.run_until_complete(downloader_parser_queue.conn())
+loop = asyncio.get_event_loop()
+downloader_parser_queue = AsyncRedisPriorityQueue('MySpider:DP', loop=loop)
+parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=loop)
 
-    parser = Parser(
-        downloader_parser_queue,
-        parser_scheduler_queue,
-        loop
-    )
+loop.run_until_complete(parser_scheduler_queue.conn())
+loop.run_until_complete(downloader_parser_queue.conn())
 
-    parser.run()
+parser = Parser(
+    downloader_parser_queue,
+    parser_scheduler_queue,
+    loop
+)
 
-cProfile.run("run()")
+parser.run()

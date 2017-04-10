@@ -9,11 +9,14 @@ import pickle
 import queue
 import time
 from asyncio import queues as async_queue
+import traceback
 
 import aioredis
 import redis
 
 from catty.libs.utils import get_default
+from catty.exception import *
+from catty import *
 
 
 class BaseQueue(object):
@@ -201,10 +204,16 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         super(AsyncRedisPriorityQueue, self).__init__(name, loop, host, port, db, password, pool_maxsize)
         self.queue_maxsize = queue_maxsize
         self.last_qsize = 0
+        self.loop = loop
 
     async def qsize(self):
-        self.last_qsize = await self.redis_conn.zcard(self.name)
-        return self.last_qsize
+        try:
+            self.last_qsize = await self.redis_conn.zcard(self.name)
+            return self.last_qsize
+        except:
+            await self.conn()
+            self.loop.create_task(self.qsize())
+            return 9999999
 
     async def empty(self):
         qsize = await self.qsize()
@@ -242,3 +251,39 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
             priority = -get_default(item, 'priority', 0)
         await self.redis_conn.zadd(self.name, priority, pickle.dumps(item))
         return True
+
+
+async def get_task(q):
+    """
+    Get a task from queue.
+    :param q:       Redis-Queue
+    :return:        Task
+    """
+    try:
+        t = await q.get()
+        return t
+    except AsyncQueueEmpty:
+        return
+    except Exception:
+        traceback.print_exc()
+        await q.conn()
+        return
+
+
+async def push_task(q, task, loop):
+    """
+    Push a task to ququq
+    :param q:       Redis-Queue
+    :param task:    Task
+    """
+    done = False
+    while not done:
+        try:
+            await q.put(task)
+            done = True
+        except AsyncQueueFull:
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=loop)
+        except Exception as e:
+            traceback.print_exc()
+            await q.conn()
+            await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=loop)

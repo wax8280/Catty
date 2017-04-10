@@ -6,4 +6,4 @@
 # Created on 2017/3/16 17:35
 
 import yaml
-CONFIG = yaml.load(open('C:\MyPyTest\Catty\catty\config\setting.yml', 'r'))
+CONFIG = yaml.load(open('../catty/config.yml', 'r'))

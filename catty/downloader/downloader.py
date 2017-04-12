@@ -11,14 +11,13 @@ import aiohttp
 from aiohttp import BaseConnector
 
 from catty.libs.response import Response
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
+from catty.message_queue.redis_queue import AsyncRedisPriorityQueue, get_task, push_task
 
 LOAD_QUEUE_SLEEP = 0.5
 
 
 class Crawler(object):
-    @staticmethod
-    async def _request(aio_request: dict, loop, connector: BaseConnector):
+    async def _request(self, aio_request: dict, loop, connector: BaseConnector):
         """The real request"""
         t_ = time.time()
         # print('[Downloader]Getting! {}'.format(aio_request))
@@ -38,20 +37,18 @@ class Crawler(object):
                 'use_time': time.time() - t_,
                 'url': client.url,
             }
+            client.close()
+            self.count -= 1
             return response
 
-    @staticmethod
-    async def request(aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncRedisPriorityQueue):
+    async def request(self, aio_request: dict, task, loop, connector: BaseConnector, out_q: AsyncRedisPriorityQueue):
         """request,update the task and put it in the queue"""
-        response = Response(**await Crawler._request(aio_request, loop, connector))
-        priority = task['priority']
+        response = Response(**await self._request(aio_request, loop, connector))
         task.update({'response': response})
-        await out_q.put((
-            priority, task
-        ))
+        await push_task(out_q, (task['priority'], task), loop)
 
 
-class DownLoader(object):
+class DownLoader(Crawler):
     def __init__(self,
                  scheduler_downloader_queue: AsyncRedisPriorityQueue,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
@@ -61,50 +58,31 @@ class DownLoader(object):
         self.downloader_parser_queue = downloader_parser_queue
 
         self.loop = loop
-        self.aio_conn = aiohttp.TCPConnector(limit=conn_limit, loop=self.loop, keepalive_timeout=30, verify_ssl=False)
-
-        # self.in_q = AsyncPriorityQueue()
-        # self.out_q = AsyncQueue()
-
-    async def load_task_from_queue(self):
-        """load task from scheduler-downloader queue"""
-        try:
-            return await self.scheduler_downloader_queue.get()
-        except:
-            # TODO
-            # Empty or ect.
-            return None
-
-    async def push_task_to_queue(self, task):
-        """push task to downloader-parser queue"""
-        try:
-            return await self.downloader_parser_queue.put(task)
-        except:
-            # TODO
-            # Full or ect.
-            return False
+        self.aio_conn = aiohttp.TCPConnector(limit=conn_limit, loop=self.loop, keepalive_timeout=10, verify_ssl=False)
+        self.count = 0
 
     async def start_crawler(self):
         """get item from queue and crawl it,push it to queue at last"""
-        task = await self.load_task_from_queue()
+        task = await get_task(self.scheduler_downloader_queue)
         if task is not None:
+            self.count += 1
+            print(self.count)
             aio_request = task['request']
             self.loop.create_task(
-                Crawler.request(
+                self.request(
                     aio_request=aio_request,
                     task=task,
                     loop=self.loop,
                     connector=self.aio_conn,
                     out_q=self.downloader_parser_queue)
             )
-
-            # call myself
+            while self.count > 1000:
+                await asyncio.sleep(0.5, loop=self.loop)
             self.loop.create_task(
                 self.start_crawler()
             )
         else:
             await asyncio.sleep(LOAD_QUEUE_SLEEP, loop=self.loop)
-            # call myself
             self.loop.create_task(
                 self.start_crawler()
             )

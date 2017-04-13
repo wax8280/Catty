@@ -7,6 +7,9 @@
 
 import threading
 import traceback
+import time
+import os
+from asyncio import BaseEventLoop
 
 from catty.config import CONFIG
 from catty.exception import *
@@ -16,30 +19,32 @@ from catty.libs.utils import *
 from catty.message_queue.redis_queue import AsyncRedisPriorityQueue, get_task, push_task
 from catty.scheduler.selector import Selector
 from catty.scheduler.tasker import Tasker
-from catty import *
+from catty import SCHEDULER, REQUEST_QUEUE_FORMAT, DUMP_PERSIST_FILE_INTERVAL, LOAD_QUEUE_SLEEP
 from catty.libs.log import Log
-import time
-import os
 
 
 class Scheduler(HandlerMixin):
-    LOAD_SPIDER_INTERVAL = 60
-
     def __init__(self,
                  scheduler_downloader_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
-                 loop):
+                 loop: BaseEventLoop):
+        """
+        :param scheduler_downloader_queue:         AsyncRedisPriorityQueue     The redis queue
+        :param parser_scheduler_queue:          AsyncRedisPriorityQueue     The redis queue
+        :param loop:                            BaseEventLoop               EventLoop
+        """
         super(Scheduler, self).__init__()
-        self.name = 'Scheduler'
+        self.name = SCHEDULER
         self.scheduler_downloader_queue = scheduler_downloader_queue
         self.parser_scheduler_queue = parser_scheduler_queue
+        # connection of all requests-queue
         self.requests_queue_conn = {}
         self.loop = loop
 
         self.tasker = Tasker()
 
-        # spider_ready_start:means that you start a spider,it will run from begin.
-        # spider_new:means that you spider that had not run yet.
+        # spider_ready_start: means that you start a spider,it will run from begin.
+        # spider_new: means that you spider that had not run yet.
         self.spider_stopped = set()
         self.spider_paused = set()
         self.spider_started = set()
@@ -49,11 +54,14 @@ class Scheduler(HandlerMixin):
         self.spider_module_handle = SpiderModuleHandle(CONFIG['SPIDER_PATH'])
         self.instantiate_spider()
 
+        # Get the speed
+        self.spider_speed = {spider_name: get_default(self.spider_module_handle.spider_instantiation[spider_name],
+                                                      'speed', 1) for spider_name in
+                             self.spider_ready_start | self.spider_paused |
+                             self.spider_stopped | self.spider_started | self.spider_todo},
+
         self.selector = Selector(
-            {spider_name: get_default(self.spider_module_handle.spider_instantiation[spider_name], 'speed', 1)
-             for spider_name in
-             self.spider_ready_start | self.spider_paused |
-             self.spider_stopped | self.spider_started | self.spider_todo},
+            self.spider_speed,
             scheduler_downloader_queue,
             self.requests_queue_conn,
             self.spider_stopped,
@@ -64,8 +72,8 @@ class Scheduler(HandlerMixin):
             self.loop,
         )
 
-        self.logger = Log('Scheduler')
-        self.is_dump_all_task = False
+        self.logger = Log(SCHEDULER)
+        self.done_all_things = False
 
     def instantiate_spider(self):
         """instantiate all spider"""
@@ -80,7 +88,7 @@ class Scheduler(HandlerMixin):
 
     async def load_task(self):
         """load the persist task & push it to request-queue"""
-        tasks = [load_task(CONFIG['DUMP_PATH'], 'scheduler', spider_name) for spider_name in
+        tasks = [load_task(CONFIG['DUMP_PATH'], 'requests_scheduler', spider_name) for spider_name in
                  self.spider_todo | self.spider_started | self.spider_ready_start]
         self.logger.log_it("[load_task]Load tasks:{}".format(tasks))
 
@@ -90,27 +98,6 @@ class Scheduler(HandlerMixin):
                     # push each task to request-queue
                     await self._push_task_to_request_queue(each_task, each_task['spider_name'])
 
-    async def dump_paused_task(self):
-        for paused_spider_name in self.spider_paused:
-            await self.dump_task(paused_spider_name)
-
-    async def dump_all_task(self):
-        for spider_name in self.spider_ready_start | self.spider_paused | self.spider_stopped | self.spider_started | self.spider_todo:
-            await self.dump_task(spider_name)
-
-    async def check_dump_request_queue(self):
-        for spider_name in self.spider_ready_start | self.spider_paused | self.spider_stopped | self.spider_started | self.spider_todo:
-            request_q = self.requests_queue_conn.setdefault(
-                REQUEST_QUEUE_FORMAT.format(spider_name),
-                AsyncRedisPriorityQueue(REQUEST_QUEUE_FORMAT.format(spider_name), loop=self.loop)
-            )
-            if await request_q.qsize():
-                await asyncio.sleep(1, loop=self.loop)
-                self.loop.create_task(self.check_dump_request_queue())
-                self.is_dump_all_task = False
-                return
-        self.is_dump_all_task = True
-
     async def dump_task(self, spider_name):
         """load the paused-spider's request queue & dump it"""
         request_q = self.requests_queue_conn.setdefault(
@@ -118,10 +105,19 @@ class Scheduler(HandlerMixin):
             AsyncRedisPriorityQueue(REQUEST_QUEUE_FORMAT.format(spider_name), loop=self.loop)
         )
         while await request_q.qsize():
-            dump_task(await get_task(request_q), CONFIG['DUMP_PATH'], 'scheduler', spider_name)
+            dump_task(await get_task(request_q), CONFIG['DUMP_PATH'], 'requests_scheduler', spider_name)
 
         await asyncio.sleep(DUMP_PERSIST_FILE_INTERVAL, loop=self.loop)
         self.loop.create_task(self.dump_paused_task())
+
+    async def dump_paused_task(self):
+        for paused_spider_name in self.spider_paused:
+            await self.dump_task(paused_spider_name)
+
+    async def dump_all_task(self):
+        for spider_name in self.spider_ready_start | self.spider_paused | self.spider_stopped | self.spider_started | self.spider_todo:
+            await self.dump_task(spider_name)
+        self.done_all_things = True
 
     async def _push_task_to_request_queue(self, request, spider_name):
         """push the task to request-queue"""
@@ -136,24 +132,26 @@ class Scheduler(HandlerMixin):
         try:
             spider_ins = self.spider_module_handle.spider_instantiation[spider_name]
         except IndexError:
-            self.logger.log_it('[run_ins_func]No this Spider or had not instance', 'ERROR')
+            self.logger.log_it('[run_ins_func]No this Spider or had not instance', 'WARN')
             return
 
         # get the method from instance
         method = spider_ins.__getattribute__(method_name)
 
         if task:
-            func_return_item = method(task=task)
+            func_return_task = method(task=task)
         else:
-            # without item param,"start" etc...
-            func_return_item = method()
-        if isinstance(func_return_item, dict):
-            task = self.tasker.make(func_return_item)
+            # without task param,"start" etc...
+            func_return_task = method()
+
+        # TODO Duplicate
+        if isinstance(func_return_task, dict):
+            task = self.tasker.make(func_return_task)
             await self._push_task_to_request_queue(task, spider_name)
 
         # return how many request mean it make how many task
-        elif isinstance(func_return_item, list):
-            for each_func_return_item in func_return_item:
+        elif isinstance(func_return_task, list):
+            for each_func_return_item in func_return_task:
                 task = self.tasker.make(each_func_return_item)
                 await self._push_task_to_request_queue(task, spider_name)
 
@@ -173,7 +171,7 @@ class Scheduler(HandlerMixin):
                 self.spider_started.add(spider_name)
                 had_started_.add(spider_name)
             except:
-                # TODO catch spiders except
+                # The except from user spiders
                 traceback.print_exc()
         self.spider_ready_start -= had_started_
 
@@ -205,8 +203,7 @@ class Scheduler(HandlerMixin):
                                 task
                             )
                         except:
-                            # TODO catch spiders except
-                            # TODO Duplicate
+                            # The except from user spiders
                             traceback.print_exc()
 
             elif task['spider_name'] in self.spider_paused:
@@ -243,8 +240,7 @@ class Scheduler(HandlerMixin):
         except KeyboardInterrupt:
             self.logger.log_it("[Ending]Doing the last thing...")
             self.loop.create_task(self.dump_all_task())
-            self.loop.create_task(self.check_dump_request_queue())
-            while not self.is_dump_all_task:
+            while not self.done_all_things:
                 time.sleep(1)
             self.logger.log_it("Bye!")
             os._exit(0)

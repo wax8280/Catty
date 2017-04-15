@@ -62,7 +62,6 @@ class ModuleHandle:
                 # had load
                 pass
 
-        # 删除
         to_remove = set()
         for each_loaded_module_filename in self.loaded_module_filename:
             if each_loaded_module_filename not in self.spider_module_filename:
@@ -90,6 +89,28 @@ class ModuleHandle:
                 to_remove.add(each_loaded_module_filename)
         self.loaded_module_filename -= to_remove
 
+    def update_module(self, spider_file_name):
+        # TODO the Spider.name == filename
+        if '.py' not in spider_file_name:
+            spider_file_name = spider_file_name + '.py'
+        path = os.path.join(self.path, spider_file_name)
+
+        spec, module = load_module(path, spider_file_name)
+        exec_module(spec, module)
+
+        self.namespace.update({spider_file_name: (spec, module)})
+        self.loaded_module_filename.add(spider_file_name)
+
+    def delete_module(self, spider_file_name):
+        if '.py' not in spider_file_name:
+            spider_file_name = spider_file_name + '.py'
+
+        path = os.path.join(self.path, spider_file_name)
+        self.namespace.pop(spider_file_name)
+        self.loaded_module_filename.remove(spider_file_name)
+        if os.path.exists(path):
+            os.remove(path)
+
 
 class SpiderModuleHandle(ModuleHandle):
     def __init__(self, path):
@@ -99,25 +120,39 @@ class SpiderModuleHandle(ModuleHandle):
         self.spider_instantiation = {}
         self.logger = Log('SpiderModuleHandle')
 
-    def _load_spider(self):
-        for file_name, value in self.namespace.items():
-            spec, module = value
-            try:
-                spider_cls = getattr(module, 'Spider')
-                self.spider_instantiation.update({
-                    spider_cls.name: spider_cls()
-                })
-                self.logger.log_it("[load_spider]Load spider name:{}".format(spider_cls.name), 'INFO')
-            except Exception as e:
-                self.logger.log_it("[load_spider]ErrInfo:{}".format(e), 'WARN')
+    def instance_spider(self, name):
+        try:
+            spec, module = self.namespace[name]
+            spider_cls = getattr(module, 'Spider')
+            self.spider_instantiation.update({
+                spider_cls.name: spider_cls()
+            })
+            self.logger.log_it("[load_spider]Load spider name:{}".format(spider_cls.name), 'INFO')
+        except Exception as e:
+            self.logger.log_it("[load_spider]ErrInfo:{}".format(e), 'WARN')
+
+    def instance_all_spider(self):
+        for file_name in self.namespace.keys():
+            self.instance_spider(file_name)
 
     def load_all_spider(self):
         self.load_all_module()
-        self._load_spider()
+        self.instance_all_spider()
 
     def load_new_spider(self):
         self.load_new_module()
-        self._load_spider()
+        self.instance_all_spider()
+
+    def update_spider(self, spider_file_name):
+        if '.py' not in spider_file_name:
+            spider_file_name = spider_file_name + '.py'
+        self.update_module(spider_file_name)
+        self.instance_spider(spider_file_name)
+
+    def delete_spider(self, spider_file_name):
+        # TODO spider_file_name == Spider.name
+        self.spider_instantiation.pop(spider_file_name)
+        self.delete_module(spider_file_name)
 
 
 if __name__ == '__main__':

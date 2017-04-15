@@ -191,7 +191,7 @@ class BaseAsyncQueue(object):
         raise NotImplementedError
 
     async def clear(self):
-        self.redis_conn.delete(self.name)
+        await self.redis_conn.delete(self.name)
 
 
 class AsyncRedisPriorityQueue(BaseAsyncQueue):

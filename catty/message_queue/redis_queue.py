@@ -213,7 +213,6 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         except:
             await self.conn()
             self.loop.create_task(self.qsize())
-            return 9999999
 
     async def empty(self):
         qsize = await self.qsize()

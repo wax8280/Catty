@@ -6,7 +6,8 @@
 # Created on 2017/2/24 13:21
 
 import pickle
-from catty.libs.utils import PriorityDict
+from catty.libs.utils import PriorityDict, md5string
+from catty import NOTSTART
 
 # task schema
 """
@@ -16,14 +17,33 @@ from catty.libs.utils import PriorityDict
         'spider_name': str,
         'status': int,
         'priority': int,
+        'retried': int,
         'meta':dict
+        {
+            'retry': int                    The count of retry.Default: 0
+            'retry_wait': int               Default: 3
+            'dupe_filter': bool             Default: False
+        }
+        # dont_filter:  bool
 
         'request': Request_obj(a aiohttop request obj),
+        {
+            'method':str                    HTTP method
+            'url':str                       URL
+            'params':dict/str               string must be encoded(optional)
+            'data':dict/bytes               to send in the body of the request(optional)
+            'headers':dict                  HTTP Headers(optional)
+            'auth':aiohttp.BasicAuth        an object that represents HTTP Basic Authorization (optional)
+            'allow_redirects':bool
+            'proxy':str                     Proxy URL(optional)
+            'proxy_auth':aiohttp.BasicAuth  an object that represents proxy HTTP Basic Authorization (optional)
+            'timeout':int                   a timeout for IO operations, 5min by default(option).Use None or 0 to disable timeout checks.
+        }
+
         'downloader': {
         },
 
         'scheduler': {
-            'exetime': int,
         },
 
         'parser': {
@@ -31,6 +51,21 @@ from catty.libs.utils import PriorityDict
         },
 
         'response': Response_obj,
+        {
+            'status':int                    HTTP status code
+            'method':str                    HTTP method
+            'cookies':SimpleCookie          HTTP cookies of response (Set-Cookie HTTP header)
+            'headers':list                  HTTP headers of response as unconverted bytes, a sequence of (key, value) pairs.
+            'content_type':str              Content-Type header
+            'charset':str                   The value is parsed from the Content-Type HTTP header.Returns str like 'utf-8' or None if no Content-Type header present in HTTP headers or it has no charset information.
+
+            # TODO make history
+            # 'history':list
+            # 'text':str                    response’s body decoded using specified encoding parameter.
+
+            'body':bytes                    response’s body as bytes.
+            'use_time':float                the time cost in request
+        }
 
         'callback': list,      # bound method      {'fetcher':bound_method,'parser':bound_method,'result_pipeline':'bound_method}
     }
@@ -39,17 +74,11 @@ status :    0        NOTSTART
 
 }
 """
-NOTSTART = 0
-STARTED = 1
-
-NOW = 0
-from catty.libs.utils import *
 
 
 class Tasker(object):
     def _make_task(self, request):
         status = NOTSTART
-        exetime = NOW
         spider_name = request['spider_name']
         priority = request['priority']
         callback = request['callback']
@@ -65,9 +94,7 @@ class Tasker(object):
             'meta': meta,
             'request': request['request'],
             'downloader': {},
-            'scheduler': {
-                'exetime': exetime,
-            },
+            'scheduler': {},
             'parser': {},
             'response': {},
             'callback': callback,

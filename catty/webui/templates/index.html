@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ch">
+<head>
+    <meta charset="UTF-8">
+    <script src="{{ url_for('static', filename='js/jquery.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/uikit.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/components/upload.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/uikit.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/upload.gradient.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/uikit.gradient.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/upload.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/progress.gradient.min.css') }}"/>
+    <title>Catty</title>
+</head>
+<body>
+<nav class="uk-navbar">
+    <ul class="uk-navbar-nav">
+        <li class="uk-active"><a href="">Spider's Manager</a></li>
+    </ul>
+    <div class="uk-navbar-content uk-navbar-flip  uk-hidden-small">
+        <div class="uk-button-group">
+            <a class="uk-button uk-button-primary" href="#upload" data-uk-modal>Spider Upload</a>
+        </div>
+    </div>
+</nav>
+
+
+<div class="uk-grid" style="margin-top: 0.5%">
+    <div class="uk-width-2-10">
+        <div class="uk-panel uk-panel-box">
+            <ul class="uk-nav uk-nav-parent-icon" data-uk-nav="{multiple:true}">
+                <li class="uk-parent uk-active">
+                    <a href="#">Spider Manager</a>
+                    <ul class="uk-nav-sub">
+                        <li><a href="">All Spiders</a></li>
+                        <li><a href="">Started Spiders</a></li>
+                        <li><a href="">Stopped Spiders</a></li>
+                        <li><a href="">Paused Spiders</a></li>
+                    </ul>
+                </li>
+                <li class="uk-parent uk-active">
+                    <a href="#">Spider Operation</a>
+                    <ul class="uk-nav-sub">
+                        <li><a href="">Reload All Spiders</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+    <div class="uk-width-8-10">
+        <div><h1 class="spider-header">Spiders</h1></div>
+        <div class="uk-grid">
+            <div class="uk-width-3-10"><b>SpiderName</b></div>
+            <div class="uk-width-2-10"><b>Count</b></div>
+            <div class="uk-width-1-10"><b>Speed</b></div>
+            <div class="uk-width-4-10"><b>Action</b></div>
+        </div>
+        <hr>
+        {% if result %}
+        {% for spider_name,value in result.All.items() %}
+        <div class="uk-grid" style="margin-top: 1%">
+            <div class="uk-width-3-10">{{ spider_name }}</div>
+            <div class="uk-width-2-10">
+                <div class="uk-badge uk-badge-success" title="1min:{{ value.success_count[0] }}
+5min:{{ value.success_count[1] }}
+60min:{{ value.success_count[2] }}">
+                    {{ value.success_count[-1] }}
+                </div>
+                <div class="uk-badge uk-badge-danger" title="1min:{{ value.fail_count[0] }}
+5min:{{ value.fail_count[1] }}
+60min:{{ value.fail_count[2] }}">{{ value.fail_count[-1] }}
+                </div>
+            </div>
+            <div class="uk-width-1-10">
+                <button class="uk-button-small uk-button uk-button-primary speed" type="button"
+                        data-spider_name="{{ spider_name }}">{{ value.speed }}
+                </button>
+            </div>
+            <div class="uk-width-4-10">
+                <div class="uk-button-dropdown" data-uk-dropdown>
+                    <button class="uk-button uk-button-small">{{ value.status }}
+                        <i class="uk-icon-caret-down"></i>
+                    </button>
+                    <div class="uk-dropdown uk-dropdown-small uk-dropdown-bottom">
+                        <ul class="uk-nav uk-nav-dropdown">
+                            <li><a href="javascript:void(0)" class="action" data-spider_name="{{ spider_name }}"
+                                   data-action_type="start">Start</a>
+                            </li>
+                            <li><a href="javascript:void(0)" class="action" data-spider_name="{{ spider_name }}"
+                                   data-action_type="run">Run</a></li>
+                            <li><a href="javascript:void(0)" class="action" data-spider_name="{{ spider_name }}"
+                                   data-action_type="pause">Pause</a>
+                            </li>
+                            <li><a href="javascript:void(0)" class="action" data-spider_name="{{ spider_name }}"
+                                   data-action_type="stop">Stop</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="uk-button-dropdown" data-uk-dropdown>
+                    <button class="uk-button uk-button-small">Clean
+                        <i class="uk-icon-caret-down"></i>
+                    </button>
+                    <div class="uk-dropdown uk-dropdown-small uk-dropdown-bottom">
+                        <ul class="uk-nav uk-nav-dropdown">
+                            <li><a href="javascript:void(0)" class="action" data-spider_name="{{ spider_name }}"
+                                   data-action_type="clean_request_queue">Request</a>
+                            </li>
+                            <li><a href="javascript:void(0)" class="action" data-action_type="delete_spider"
+                                   data-spider_name="{{ spider_name }}">DupeFilter</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <button class="uk-button uk-button-small action" data-action_type="update_spider"
+                        data-spider_name="{{ spider_name }}">Update
+                </button>
+                <button class=" uk-button uk-button-small uk-button-danger action" data-action_type="delete_spider"
+                        data-spider_name="{{ spider_name }}">Delete
+                </button>
+
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+    </div>
+</div>
+
+<div id="upload" class="uk-modal">
+    <div class="uk-modal-dialog">
+        <a class="uk-modal-close close-upload"></a>
+
+        <div id="upload-drop" class="uk-placeholder uk-text-center">
+            <i class="uk-icon-cloud-upload uk-icon-medium uk-text-muted uk-margin-small-right"></i> 将文件拖拽至此 或 <a
+                class="uk-form-file">选择一个文件<input id="upload-select" type="file"></a>.
+        </div>
+
+        <div id="progressbar" class="uk-progress uk-hidden">
+            <div class="uk-progress-bar" style="width: 0%;">...</div>
+        </div>
+
+    </div>
+
+
+</div>
+
+</body>
+</html>

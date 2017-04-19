@@ -9,14 +9,11 @@ import os
 from catty.libs.log import Log
 
 
-def load_module(script_path, module_name):
+def load_module(script_path: str, module_name: str):
     """
     return a module
     spec.loader.exec_module(foo)
     foo.A()
-    :param script_path:
-    :param module_name:
-    :return:
     """
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     module = importlib.util.module_from_spec(spec)
@@ -33,7 +30,7 @@ def reload_module(module):
     importlib.reload(module)
 
 
-def search_in_dir(path, name):
+def search_in_dir(path: str, name: str) -> set:
     return set(file for file in os.listdir(path) if name in file)
 
 
@@ -70,7 +67,7 @@ class ModuleHandle:
         self.loaded_module_filename -= to_remove
 
     def load_all_module(self):
-        """reload all moduel"""
+        """reload all module"""
         self.spider_module_filename = search_in_dir(self.path, '.py')
 
         for each_not_loaded_module_filename in self.spider_module_filename:
@@ -81,7 +78,6 @@ class ModuleHandle:
             self.namespace.update({each_not_loaded_module_filename: (spec, module)})
             self.loaded_module_filename.add(each_not_loaded_module_filename)
 
-        # 删除
         to_remove = set()
         for each_loaded_module_filename in self.loaded_module_filename:
             if each_loaded_module_filename not in self.spider_module_filename:
@@ -120,7 +116,7 @@ class SpiderModuleHandle(ModuleHandle):
         self.spider_instantiation = {}
         self.logger = Log('SpiderModuleHandle')
 
-    def instance_spider(self, name):
+    def _instance_spider(self, name):
         try:
             spec, module = self.namespace[name]
             spider_cls = getattr(module, 'Spider')
@@ -131,31 +127,25 @@ class SpiderModuleHandle(ModuleHandle):
         except Exception as e:
             self.logger.log_it("[load_spider]ErrInfo:{}".format(e), 'WARN')
 
-    def instance_all_spider(self):
+    def _instance_all_spider(self):
         for file_name in self.namespace.keys():
-            self.instance_spider(file_name)
+            self._instance_spider(file_name)
 
     def load_all_spider(self):
         self.load_all_module()
-        self.instance_all_spider()
+        self._instance_all_spider()
 
     def load_new_spider(self):
         self.load_new_module()
-        self.instance_all_spider()
+        self._instance_all_spider()
 
     def update_spider(self, spider_file_name):
         if '.py' not in spider_file_name:
             spider_file_name = spider_file_name + '.py'
         self.update_module(spider_file_name)
-        self.instance_spider(spider_file_name)
+        self._instance_spider(spider_file_name)
 
     def delete_spider(self, spider_file_name):
         # TODO spider_file_name == Spider.name
         self.spider_instantiation.pop(spider_file_name)
         self.delete_module(spider_file_name)
-
-
-if __name__ == '__main__':
-    spider_module_handle = SpiderModuleHandle('../../test_handle_module')
-    spider_module_handle.load_all_spider()
-    print(spider_module_handle.spider_instantiation)

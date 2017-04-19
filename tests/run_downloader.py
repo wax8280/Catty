@@ -17,6 +17,12 @@ downloader_parser_queue = AsyncRedisPriorityQueue('MySpider:DP', loop, queue_max
 loop.run_until_complete(scheduler_downloader_queue.conn())
 loop.run_until_complete(downloader_parser_queue.conn())
 
-downloader = DownLoader(scheduler_downloader_queue, downloader_parser_queue, loop)
+downloader = DownLoader(
+    scheduler_downloader_queue,
+    downloader_parser_queue,
+    loop,
+    1000,
+    100,
+    True)
 
 downloader.run()

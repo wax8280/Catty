@@ -11,3 +11,4 @@ multidict
 asynctest
 furl
 pyyaml
+aiofiles

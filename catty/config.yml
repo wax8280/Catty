@@ -6,4 +6,22 @@ PORT :
   SCHEDULER : 38383
   PARSER : 38384
 
+PERSISTENCE:
+  PERSIST_BEFORE_EXIT : false
+
 AUTHKEY : 'hello'
+
+DUPE_FILTER :
+  SEEDS :
+    - "HELLO"
+    - "WORLD"
+    - "CATTY"
+    - "PYTHON"
+    - "APPLE"
+    - "THIS"
+    - "THAT"
+    - "MY"
+    - "HI"
+    - "NOT"
+
+  BLOCKNUM : 1

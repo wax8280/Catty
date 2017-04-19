@@ -8,19 +8,28 @@
 import math
 import time
 import traceback
+from asyncio import BaseEventLoop
 
 from catty.exception import *
 from catty.libs.log import Log
 from catty.libs.utils import *
-from catty.message_queue.redis_queue import get_task, push_task
+from catty.message_queue.redis_queue import get_task, push_task, AsyncRedisPriorityQueue
 from catty.config import CONFIG
-from catty import SELECTOR_INTERVAL, REQUEST_QUEUE_FORMAT
+from catty import SELECTOR_INTERVAL, REQUEST_QUEUE_FORMAT, SELECTOR
 
 
 class Selector:
-    def __init__(self, spider_speed, scheduler_downloader_queue, requests_queue, spider_stopped, spider_paused,
-                 spider_started, spider_ready_start, spider_todo, loop):
-        self.logger = Log('Selector')
+    def __init__(self,
+                 spider_speed: dict,
+                 scheduler_downloader_queue: AsyncRedisPriorityQueue,
+                 requests_queue: dict,
+                 spider_stopped: set,
+                 spider_paused: set,
+                 spider_started: set,
+                 spider_ready_start: set,
+                 spider_todo: set,
+                 loop: BaseEventLoop):
+        self.logger = Log(SELECTOR)
         self.scheduler_downloader_queue = scheduler_downloader_queue
         self.requests_queue = requests_queue
         self.loop = loop
@@ -34,6 +43,8 @@ class Selector:
         self.spider_started = spider_started
         self.spider_ready_start = spider_ready_start
         self.spider_todo = spider_todo
+        self.all_spider_speed = {}
+        self.spider_speed_reciprocal = {}
 
         self.init_speed(spider_speed)
 
@@ -52,7 +63,7 @@ class Selector:
         last_running_time = self.running_time
         self.running_time = int(time.time()) - self.run_at
 
-        # TODO dump paused spider should not in Selector
+        # FIXME dump paused spider should not in Selector
         for spider_name in self.spider_started | self.spider_paused:
             speed_reciprocal = self.spider_speed_reciprocal[spider_name]
             for each_diff_time in range(last_running_time, self.running_time):
@@ -67,7 +78,7 @@ class Selector:
                                 task = await get_task(requests_q)
                                 if task:
                                     if task['spider_name'] in self.spider_started:
-                                        await push_task(self.scheduler_downloader_queue, task, loop)
+                                        await push_task(self.scheduler_downloader_queue, task, self.loop)
                                         self.logger.log_it('[select_task]{} tid:{}'.format(spider_name, task['tid']))
                                     elif task['spider_name'] in self.spider_paused:
                                         # 持久化
@@ -78,10 +89,10 @@ class Selector:
                     else:
                         requests_q = self.requests_queue.get(REQUEST_QUEUE_FORMAT.format(spider_name))
                         if requests_q:
-                            task = await load_task(requests_q)
+                            task = await get_task(requests_q)
                             if task:
                                 if task['spider_name'] in self.spider_started:
-                                    await push_task(self.scheduler_downloader_queue, task, loop)
+                                    await push_task(self.scheduler_downloader_queue, task, self.loop)
                                     self.logger.log_it('[select_task]{} tid:{}'.format(spider_name, task['tid']))
                                 elif task['spider_name'] in self.spider_paused:
                                     # 持久化
@@ -92,12 +103,3 @@ class Selector:
 
         await asyncio.sleep(SELECTOR_INTERVAL, loop=self.loop)
         self.loop.create_task(self.select_task())
-
-
-if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    s = Selector([], '', '', loop)
-
-    s.init_speed({'1/s': 1, '0.3/s': 0.3, '3/s': 3})
-    loop.create_task(s.select_task())
-    loop.run_forever()

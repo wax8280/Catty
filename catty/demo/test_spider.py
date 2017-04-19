@@ -7,22 +7,9 @@
 from catty.parser.base_parser import BaseParser
 from catty.spider.base_spider import BaseSpider
 from pyquery import PyQuery
-
-
-class MyParser(BaseParser):
-    def parser_content_page(self, response):
-        pq = PyQuery(response.body)
-        print(pq('title').text())
-        return {'title': pq('title').text(), }
-
-    def parser_list_page(self, response):
-        pq = PyQuery(response.body)
-
-        # article_url = [article_a_tab.attr.href for article_a_tab in pq('.post .post-title a').items()]
-        article_url = [article_a_tab.attr.href for article_a_tab in pq('a').items()]
-        next_page_url = pq('.next a').eq(0).attr.href
-        return {'article_url': article_url, 'next_page_url': next_page_url}
-
+from catty.libs.utils import md5string
+import aiofiles
+import os
 
 default_headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -32,39 +19,45 @@ default_headers = {
 }
 
 
+async def write_response(root_path, response):
+    text = response.url + '\n' + response.body
+
+    async with aiofiles.open(os.path.join(root_path, md5string(text)), mode='w') as f:
+        await f.write(text)
+
+
+class MyParser(BaseParser):
+    async def parser_content_page(self, response, task, loop):
+        pq = PyQuery(response.body)
+        urls = [a.attr.href for a in pq('a').items() if a.attr.href.startswith('http')]
+        print(pq('title').text() + '\t' + str(task['meta']['deep']))
+        await write_response('/mnt2/test', response)
+        return {'urls': urls}
+
+
 class Spider(BaseSpider, MyParser):
-    name = 'TestSpider'
+    name = 'test_spider'
+    urls = ['https://web.sogou.com/', 'http://www.999.com/xinwen/', 'http://www.haoqq.com/', 'http://news.hao123.com/']
 
     def start(self):
-        callbacks = [
-            # {'parser': self.parser_content_page, },
-            {'parser': self.parser_list_page, 'fetcher': [self.get_list, self.get_content]},
-        ]
+        callbacks = [{'parser': self.parser_content_page, 'fetcher': self.get_content}]
 
-        return self.request(
-            url='http://applehater.cn/',
+        return [self.request(
+            url=url,
             callback=callbacks,
             headers=default_headers,
-        )
-
-    # {"type":"start","spider_name":"TestSpider"}
-    def get_list(self, task):
-        callbacks = [
-            # {'parser': self.parser_content_page, },
-            {'parser': self.parser_list_page, 'fetcher': [self.get_list, self.get_content], },
-        ]
-
-        return self.request(
-            url=task['parser']['item']['next_page_url'],
-            callback=callbacks,
-            headers=default_headers,
-        )
+            meta={'deep': 100, 'dupe_filter': True}
+        ) for url in self.urls]
 
     def get_content(self, task):
+        callbacks = [{'parser': self.parser_content_page, 'fetcher': self.get_content}]
+
         return [
             self.request(
                 url=url,
-                callback=[{'parser': self.parser_content_page}],
+                callback=callbacks,
                 headers=default_headers,
+                meta={'deep': task['meta']['deep'] - 1, 'dupe_filter': True},
+                priority=task['meta']['deep'] - 1,
             )
-            for url in task['parser']['item']['article_url']]
+            for url in task['parser']['item']['urls']]

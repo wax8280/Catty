@@ -6,7 +6,8 @@
 # Created on 2017/2/24 14:29
 from catty.exception import Retry_current_task
 
-class BaseParser(object):
 
-    def retry_current_task(self):
+class BaseParser(object):
+    @staticmethod
+    def retry_current_task():
         raise Retry_current_task

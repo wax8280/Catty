@@ -18,13 +18,13 @@ class Counter:
         self.max_size = 1440
 
     def add_success(self, name):
+        self.value_d.setdefault(name + '_fail', 0)
         value = self.value_d.setdefault(name + '_success', 0)
-        value = self.value_d.setdefault(name + '_fail', 0)
         self.value_d.update({name + '_success': value + 1})
 
     def add_fail(self, name):
+        self.value_d.setdefault(name + '_success', 0)
         value = self.value_d.setdefault(name + '_fail', 0)
-        value = self.value_d.setdefault(name + '_success', 0)
         self.value_d.update({name + '_fail': value + 1})
 
     async def update(self):

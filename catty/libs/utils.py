@@ -57,7 +57,7 @@ class PriorityDict(dict):
 def get_eventloop():
     try:
         import uvloop
-        return uvloop.uvloop.new_event_loop()
+        return uvloop.new_event_loop()
     except ImportError:
         import asyncio
         return asyncio.get_event_loop()
@@ -96,6 +96,7 @@ def load_task(dump_path, dump_type, spider_name, delete=False):
             os.remove(path)
         return result
 
+
 def set_safe_remove(s, k):
     try:
         s.remove(k)
@@ -107,13 +108,9 @@ if __name__ == '__main__':
     # print(build_url('http://你好.世界/ドメイン.テスト'))
     # print(build_url('https://www.baidu.com/s?wd=墨迹'))
 
-
     foo = PriorityDict({'priority': 10, 'name': 'foo'})
     bar = PriorityDict({'priority': 10, 'name': 'bar'})
     print(foo == bar)
     foobar = PriorityDict({'priority': 20, 'name': 'foobar'})
     print(foobar == bar)
     print(foobar > bar)
-
-    # dump_task({'a': 'asd'}, './', 's', 'dd')
-    print(load_task('./', 's', 'dd'))

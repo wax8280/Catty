@@ -29,8 +29,11 @@ DEFAULT_TIMEOUT = 60
 
 
 class Request(object):
+    # __slots__ = ['method', 'url', 'params', 'data', 'headers', 'auth', 'allow_redirects', 'proxy', 'proxy_auth',
+    #              'timeout', 'dumped_request']
+
     def __init__(self, url, method='GET', params=None, data=None, headers=DEFAULT_HEADERS, auth=None,
-                 allow_redirects=True, proxy=None, proxy_auth=None, timeout=None,**kwargs):
+                 allow_redirects=True, proxy=None, proxy_auth=None, timeout=None, **kwargs):
         self.method = method
         self.url = build_url(url)
         self.params = params
@@ -51,7 +54,7 @@ class Request(object):
     def __getitem__(self, item):
         return self.__getattribute__(item)
 
-    def dump_request(self):
+    def dump_request(self) -> dict:
         if self.dumped_request:
             return self.dumped_request
 
@@ -81,8 +84,3 @@ class Request(object):
 
     def __repr__(self):
         return str(Request.dump_request(self))
-
-
-if __name__ == '__main__':
-    r = Request(url='http://www.baidu.com/fxxk?start=10&end=20')
-    print(str(r))

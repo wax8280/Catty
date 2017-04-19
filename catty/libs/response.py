@@ -26,7 +26,11 @@
 
 
 class Response(object):
-    def __init__(self, status, method, cookies, headers, content_type, charset, body, use_time, url):
+    # __slots__ = ['method', 'url', 'dumped_request', 'headers', 'use_time', 'body', 'charset', 'content_type',
+    #              'cookies', 'status']
+
+    def __init__(self, status='', method='', use_time='', url='', body='', cookies='', charset='', content_type='',
+                 headers=''):
         self.status = status
         self.method = method
         self.headers = headers
@@ -42,7 +46,7 @@ class Response(object):
     def __getitem__(self, item):
         return self.__getattribute__(item)
 
-    def dump_request(self):
+    def dump_request(self) -> dict:
         if self.dumped_request:
             return self.dumped_request
 

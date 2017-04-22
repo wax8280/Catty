@@ -81,6 +81,7 @@ def dump_task(task, dump_path, dump_type, spider_name):
         cursor.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
     conn.commit()
     conn.close()
+    return True
 
 
 def load_task(dump_path, dump_type, spider_name, delete=False):

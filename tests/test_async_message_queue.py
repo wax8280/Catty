@@ -5,7 +5,9 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/3/8 19:35
 import asynctest
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
+
+from catty.message_queue import AsyncRedisPriorityQueue
+
 
 class Test(asynctest.TestCase):
     use_default_loop = True

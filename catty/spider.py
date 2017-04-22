@@ -5,15 +5,27 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 14:26
 from catty.libs.request import Request
+import abc
 
 
-class BaseSpider(object):
+class BaseSpider(metaclass=abc.ABCMeta):
+    speed = 1
+    seeds = ["HELLO", "WORLD", "CATTY", "PYTHON", "APPLE", "THIS", "THAT", "MY", "HI", "NOT"]
+    blocknum = 1
+
+    @abc.abstractmethod
+    def start(self):
+        pass
+
     def request(self, **kwargs):
-        # to mixin
         request = Request(**kwargs)
         callback = kwargs['callback']
-        # just str
+
+        # method'name
         n_callback = []
+        if isinstance(callback, dict):
+            callback = [callback]
+
         for each_callback in callback:
             for k, v in each_callback.items():
                 if not isinstance(v, list):
@@ -21,25 +33,17 @@ class BaseSpider(object):
                 else:
                     n_callback.append({k: [i.__name__ for i in v]})
 
+        meta = kwargs.get('meta', {})
+
+        meta.setdefault('retry', 0)
+        meta.setdefault('retry_wait', 3)
+        meta.setdefault('dupe_filter', False)
+
         _d = {
             'spider_name': self.name,
             'callback': n_callback,
             'request': request,
-            'meta': kwargs.get('meta', {}),
+            'meta': meta,
             'priority': kwargs.get('priority', 0),
         }
         return _d
-
-
-if __name__ == '__main__':
-    from catty.demo.spider import Spider
-
-    myspider = Spider()
-    task = myspider.start()
-
-    print(task)
-    print(myspider.__getattribute__(task['callback'][0]['parser']))
-    """
-    {'spider_name': 'MySpider', 'callback': [{'parser': 'test', 'fetcher': 'get_list', 'result_pipeline': 'save_list'}, {'parser': 'parser_content_page', 'fetcher': 'get_content'}], 'request': <catty.libs.request.Request object at 0x000001A3D87245C0>, 'meta': '', 'priority': 0}
-    <bound method MyParser.test of <catty.demo.spider.Spider object at 0x000001A3D87245F8>>
-    """

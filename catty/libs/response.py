@@ -47,9 +47,6 @@ class Response(object):
         return self.__getattribute__(item)
 
     def dump_request(self) -> dict:
-        if self.dumped_request:
-            return self.dumped_request
-
         self.dumped_request = {
             'status': self.status,
             'method': self.method,

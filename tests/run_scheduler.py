@@ -4,21 +4,24 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/3/27 23:28
-import asyncio
+from catty.message_queue import AsyncRedisPriorityQueue
+from catty.scheduler import Scheduler
+from catty.config import QUEUE
+from catty.libs.utils import get_eventloop
 
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
-from catty.scheduler.scheduler import Scheduler
+loop = get_eventloop()
+if __name__ == '__main__':
+    scheduler_downloader_queue = AsyncRedisPriorityQueue(
+        'Catty:Scheduler-Downloader', loop=loop, queue_maxsize=QUEUE['MAX_SIZE'])
+    parser_scheduler_queue = AsyncRedisPriorityQueue(
+        'Catty:Parser-Scheduler', loop=loop, queue_maxsize=QUEUE['MAX_SIZE'])
+    loop.run_until_complete(scheduler_downloader_queue.conn())
+    loop.run_until_complete(parser_scheduler_queue.conn())
 
-loop = asyncio.get_event_loop()
+    scheduler = Scheduler(
+        scheduler_downloader_queue,
+        parser_scheduler_queue,
+        loop=loop
+    )
 
-scheduler_downloader_queue = AsyncRedisPriorityQueue('MySpider:SD', loop=loop)
-parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=loop)
-scheduler = Scheduler(
-    scheduler_downloader_queue,
-    parser_scheduler_queue,
-    loop=loop
-)
-
-loop.run_until_complete(scheduler_downloader_queue.conn())
-loop.run_until_complete(parser_scheduler_queue.conn())
-scheduler.run()
+    scheduler.run()

@@ -10,9 +10,9 @@ from copy import deepcopy
 
 import asynctest
 
+from catty.message_queue import AsyncRedisPriorityQueue
+from catty.parser import Parser
 from catty.libs.response import Response
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
-from catty.parser.parser import Parser
 
 
 class TestParser(asynctest.TestCase):
@@ -21,7 +21,7 @@ class TestParser(asynctest.TestCase):
     @classmethod
     def setUpClass(cls):
         from catty.demo.spider import Spider
-        from catty.scheduler.tasker import Tasker
+        from catty.scheduler import Tasker
 
         cls.downloader_parser_queue = AsyncRedisPriorityQueue('MySpider:DP', loop=cls.loop)
         cls.parser_scheduler_queue = AsyncRedisPriorityQueue('MySpider:PS', loop=cls.loop)

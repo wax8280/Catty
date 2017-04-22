@@ -4,17 +4,16 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/4/10 19:05
-import time
 import asyncio
 from collections import deque
 
 
 class Counter:
-    def __init__(self, loop):
+    def __init__(self, loop, value_d=None, cache_value=None):
         self.loop = loop
         self.interval = 60
-        self.value_d = {}
-        self.cache_value = {}
+        self.value_d = {} if not value_d else value_d
+        self.cache_value = {} if not cache_value else cache_value
         self.max_size = 1440
 
     def add_success(self, name):

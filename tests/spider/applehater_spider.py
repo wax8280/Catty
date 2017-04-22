@@ -4,10 +4,16 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/3/28 13:29
-from catty.parser.base_parser import BaseParser
-from catty.spider.base_spider import BaseSpider
+import os
+
+import aiofiles
 from pyquery import PyQuery
-import asyncio
+
+from catty.parser import BaseParser
+from catty.spider import BaseSpider
+from catty.libs.utils import md5string
+
+SAVE_PATH = '/mnt2/applehater/'
 
 default_headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -17,12 +23,14 @@ default_headers = {
 }
 
 
+async def write_response(root_path, text):
+    async with aiofiles.open(os.path.join(root_path, md5string(text)), mode='wb') as f:
+        await f.write(text)
+
+
 class MyParser(BaseParser):
     async def parser_content_page(self, response, loop):
-        pq = PyQuery(response.body)
-        print(pq('title').text())
-        await asyncio.sleep(5, loop=loop)
-        return {'title': pq('title').text(), }
+        await write_response(SAVE_PATH, response.body)
 
     def parser_list_page(self, response):
         pq = PyQuery(response.body)

@@ -4,8 +4,7 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 18:37
-import asyncio
-import queue
+from asyncio.queues import QueueEmpty, QueueFull
 
 
 class Retry_current_task(Exception):
@@ -13,7 +12,5 @@ class Retry_current_task(Exception):
         return "Retry current task."
 
 
-AsyncQueueEmpty = asyncio.queues.QueueEmpty
-AsyncQueueFull = asyncio.queues.QueueFull
-QueueEmpty = queue.Empty
-QueueFull = queue.Full
+AsyncQueueEmpty = QueueEmpty
+AsyncQueueFull = QueueFull

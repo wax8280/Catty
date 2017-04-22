@@ -4,13 +4,15 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/4/11 18:14
+import os
+
 from flask import Flask
 from flask import json
-from flask import request
 from flask import render_template
-from catty.handler import HandlerClient
-from catty.config import CONFIG
-import os
+from flask import request
+
+import catty.config
+from catty import HandlerClient
 
 app = Flask(__name__)
 app.debug = True
@@ -22,7 +24,7 @@ def upload_file():
     if request.method == 'POST':
         try:
             f = request.files['py_script']
-            f.save(os.path.join(CONFIG['SPIDER_PATH'], f.filename))
+            f.save(os.path.join(catty.config.SPIDER_PATH, f.filename))
             client.action("update_spider", f.filename)
         except Exception as e:
             return json.dumps({'code': -1, 'msg': str(e)})

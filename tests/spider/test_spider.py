@@ -4,12 +4,14 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/3/28 13:29
-from catty.parser.base_parser import BaseParser
-from catty.spider.base_spider import BaseSpider
-from pyquery import PyQuery
-from catty.libs.utils import md5string
-import aiofiles
 import os
+
+import aiofiles
+from pyquery import PyQuery
+
+from catty.parser import BaseParser
+from catty.spider import BaseSpider
+from catty.libs.utils import md5string
 
 default_headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -19,9 +21,7 @@ default_headers = {
 }
 
 
-async def write_response(root_path, response):
-    text = response.url + '\n' + response.body
-
+async def write_response(root_path, text):
     async with aiofiles.open(os.path.join(root_path, md5string(text)), mode='w') as f:
         await f.write(text)
 

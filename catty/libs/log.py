@@ -5,8 +5,8 @@ import logging
 import sys
 import os
 from logging.handlers import WatchedFileHandler
-from catty.config import CONFIG
 from functools import partial
+import catty.config
 
 
 class BaseLog(object):
@@ -26,7 +26,7 @@ class BaseLog(object):
     @staticmethod
     def get_logger(logger_name):
 
-        failed_path = os.path.join(CONFIG['LOG_PATH'], logger_name)
+        failed_path = os.path.join(catty.config.LOG_PATH, logger_name)
         if not os.path.exists(failed_path):
             os.makedirs(failed_path)
 

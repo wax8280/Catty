@@ -5,10 +5,7 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/26 10:21
 from catty.libs.utils import build_url
-
-# TODO
-DEFAULT_HEADERS = ''
-DEFAULT_TIMEOUT = 60
+import catty.config
 
 # request schema
 """
@@ -32,7 +29,7 @@ class Request(object):
     # __slots__ = ['method', 'url', 'params', 'data', 'headers', 'auth', 'allow_redirects', 'proxy', 'proxy_auth',
     #              'timeout', 'dumped_request']
 
-    def __init__(self, url, method='GET', params=None, data=None, headers=DEFAULT_HEADERS, auth=None,
+    def __init__(self, url, method='GET', params=None, data=None, headers=catty.config.DEFAULT_HEADERS, auth=None,
                  allow_redirects=True, proxy=None, proxy_auth=None, timeout=None, **kwargs):
         self.method = method
         self.url = build_url(url)
@@ -55,9 +52,6 @@ class Request(object):
         return self.__getattribute__(item)
 
     def dump_request(self) -> dict:
-        if self.dumped_request:
-            return self.dumped_request
-
         self.dumped_request = {
             'url': self.url,
             'method': self.method,

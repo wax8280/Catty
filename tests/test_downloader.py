@@ -5,11 +5,12 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/3/9 17:06
 
-import asynctest
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
-import uvloop
 import asyncio
-from catty.downloader.downloader import DownLoader
+
+import uvloop
+
+from catty.message_queue import AsyncRedisPriorityQueue
+from catty.downloader import DownLoader
 from catty.libs.request import Request
 
 

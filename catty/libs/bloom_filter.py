@@ -4,9 +4,9 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/4/18 10:38
-from catty.libs.utils import md5string
 import hashlib
 import aioredis
+from catty.libs.utils import md5string
 
 
 class Hash(object):
@@ -72,6 +72,11 @@ class RedisBloomFilter(object):
                 (self.host, self.port), db=self.db, loop=self.loop
             )
         return self.redis_conn
+
+    async def clean(self):
+        for i in range(self.blockNum):
+            key = self.key + ':' + str(i)
+            await self.redis_conn.delete(key)
 
     async def is_contain(self, string):
         if isinstance(string, str):

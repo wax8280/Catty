@@ -9,8 +9,8 @@ import asyncio
 
 import asynctest
 
-from catty.message_queue.redis_queue import AsyncRedisPriorityQueue
-from catty.scheduler.scheduler import Scheduler
+from catty.message_queue import AsyncRedisPriorityQueue
+from catty.scheduler import Scheduler
 
 
 class TestAsyncScheduler(asynctest.TestCase):

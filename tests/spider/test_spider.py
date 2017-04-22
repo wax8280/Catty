@@ -22,7 +22,7 @@ default_headers = {
 
 
 async def write_response(root_path, text):
-    async with aiofiles.open(os.path.join(root_path, md5string(text)), mode='w') as f:
+    async with aiofiles.open(os.path.join(root_path, md5string(text)), mode='wb') as f:
         await f.write(text)
 
 
@@ -31,7 +31,7 @@ class MyParser(BaseParser):
         pq = PyQuery(response.body)
         urls = [a.attr.href for a in pq('a').items() if a.attr.href.startswith('http')]
         print(pq('title').text() + '\t' + str(task['meta']['deep']))
-        await write_response('/mnt2/test', response)
+        await write_response('/mnt2/test', response.body)
         return {'urls': urls}
 
 

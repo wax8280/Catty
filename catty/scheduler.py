@@ -29,7 +29,7 @@ class Scheduler(HandlerMixin):
         """
         :param scheduler_downloader_queue:      AsyncRedisPriorityQueue     The redis queue
         :param parser_scheduler_queue:          AsyncRedisPriorityQueue     The redis queue
-        :param loop:                            asyncio.BaseEventLoop               EventLoop
+        :param loop:                            asyncio.BaseEventLoop       EventLoop
         """
         super(Scheduler, self).__init__()
         self.name = 'Scheduler'
@@ -76,7 +76,8 @@ class Scheduler(HandlerMixin):
         # Get the speed
         self.selector = Selector(
             {spider_name: get_default(
-                self.spider_module_handle.spider_instantiation[spider_name], 'speed', catty.config.SPIDER_DEFAULT['SPEED'])
+                self.spider_module_handle.spider_instantiation[spider_name], 'speed',
+                catty.config.SPIDER_DEFAULT['SPEED'])
              for spider_set in self.all_spider_set for spider_name in spider_set},
             self.scheduler_downloader_queue,
             self.requests_queue_conn,
@@ -90,7 +91,7 @@ class Scheduler(HandlerMixin):
 
     async def load_persist_request_queue_task(self, spider_name: str):
         """load the persist task & push it to request-queue"""
-        tasks = load_task(catty.config.DUMP_PATH, 'request_queue', spider_name)
+        tasks = load_task(catty.config.PERSISTENCE['DUMP_PATH'], 'request_queue', spider_name)
         self.logger.log_it("[load_task]Load tasks:{}".format(tasks))
 
         if tasks is not None:
@@ -101,19 +102,19 @@ class Scheduler(HandlerMixin):
     async def dump_persist_request_queue_task(self, spider_name: str):
         """load the paused-spider's request queue & dump it"""
         request_q = self.requests_queue_conn.setdefault(
-            catty.config.REQUEST_QUEUE_FORMAT.format(spider_name),
-            AsyncRedisPriorityQueue(catty.config.REQUEST_QUEUE_FORMAT.format(spider_name), loop=self.loop)
+            "{}:requests".format(spider_name),
+            AsyncRedisPriorityQueue("{}:requests".format(spider_name), loop=self.loop)
         )
         if not request_q.redis_conn:
             await request_q.conn()
         while await request_q.qsize():
-            dump_task(await get_task(request_q), catty.config.DUMP_PATH, 'request_queue', spider_name)
+            dump_task(await get_task(request_q), catty.config.PERSISTENCE['DUMP_PATH'], 'request_queue', spider_name)
 
     async def clean_queue(self, spider_name: str):
         """Clean the spider's requests queue"""
         request_q = self.requests_queue_conn.setdefault(
-            catty.config.REQUEST_QUEUE_FORMAT.format(spider_name),
-            AsyncRedisPriorityQueue(catty.config.REQUEST_QUEUE_FORMAT.format(spider_name), loop=self.loop)
+            "{}:requests".format(spider_name),
+            AsyncRedisPriorityQueue("{}:requests".format(spider_name), loop=self.loop)
         )
         if not request_q.redis_conn:
             await request_q.conn()
@@ -134,7 +135,7 @@ class Scheduler(HandlerMixin):
         spider_speed = self.selector.spider_speed
         p = pickle.dumps(spider_speed)
         self.logger.log_it("[dump_speed]{}".format(spider_speed))
-        root = os.path.join(catty.config.DUMP_PATH, 'scheduler')
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
         if not os.path.exists(root):
             os.mkdir(root)
         path = os.path.join(root, 'speed')
@@ -144,7 +145,7 @@ class Scheduler(HandlerMixin):
         return True
 
     def load_speed(self):
-        path = os.path.join(os.path.join(catty.config.DUMP_PATH, 'scheduler'), 'speed')
+        path = os.path.join(os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler'), 'speed')
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 t = f.read()
@@ -164,7 +165,7 @@ class Scheduler(HandlerMixin):
         }
         p = pickle.dumps(status)
         self.logger.log_it("[dump_status]{}".format(status))
-        root = os.path.join(catty.config.DUMP_PATH, 'scheduler')
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
         if not os.path.exists(root):
             os.mkdir(root)
         path = os.path.join(root, 'status')
@@ -174,7 +175,7 @@ class Scheduler(HandlerMixin):
         return True
 
     def load_status(self):
-        path = os.path.join(os.path.join(catty.config.DUMP_PATH, 'scheduler'), 'status')
+        path = os.path.join(os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler'), 'status')
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 t = f.read()
@@ -216,8 +217,8 @@ class Scheduler(HandlerMixin):
     async def _push_task_to_request_queue(self, request: dict, spider_name: str):
         """push the task to request-queue"""
         request_q = self.requests_queue_conn.setdefault(
-            catty.config.REQUEST_QUEUE_FORMAT.format(spider_name),
-            AsyncRedisPriorityQueue(catty.config.REQUEST_QUEUE_FORMAT.format(spider_name), loop=self.loop)
+            "{}:requests".format(spider_name),
+            AsyncRedisPriorityQueue("{}:requests".format(spider_name), loop=self.loop)
         )
         await push_task(request_q, request, self.loop)
 
@@ -249,12 +250,12 @@ class Scheduler(HandlerMixin):
                     task = self.tasker.make(each_func_return_item)
 
                 # DupeFilter
-                if task['meta']['catty.config.DUPE_FILTER']:
+                if task['meta']['dupe_filter']:
                     spider_ins = self.spider_module_handle.spider_instantiation.get(spider_name)
                     if not spider_ins:
                         return
-                    seeds = get_default(spider_ins, 'seeds', catty.config.DUPE_FILTER['SEEDS'])
-                    blocknum = get_default(spider_ins, 'blocknum', catty.config.DUPE_FILTER['BLOCKNUM'])
+                    seeds = get_default(spider_ins, 'seeds', catty.config.SPIDER_DEFAULT['SEEDS'])
+                    blocknum = get_default(spider_ins, 'blocknum', catty.config.SPIDER_DEFAULT['BLOCKNUM'])
 
                     bloom_filter = self.bloom_filter.setdefault(
                         task['spider_name'],
@@ -266,17 +267,21 @@ class Scheduler(HandlerMixin):
                     if not await bloom_filter.is_contain(task['tid']):
                         await bloom_filter.add(task['tid'])
                     else:
-                        self.logger.log_it("[run_ins_func]Filtered tid:{} url:{} data:{}".format(
+                        self.logger.log_it("[run_ins_func]Filtered tid:{} url:{} data:{} params:{}".format(
                             task['tid'],
                             task['request'].url,
-                            task['request'].data))
+                            task['request'].data,
+                            task['request'].params
+                        ))
                         f = False
 
                 if f:
-                    self.logger.log_it("[run_ins_func]New request tid:{} url:{} data:{}".format(
+                    self.logger.log_it("[run_ins_func]New request tid:{} url:{} data:{} params:{}".format(
                         task['tid'],
                         task['request'].url,
-                        task['request'].data))
+                        task['request'].data,
+                        task['request'].params
+                    ))
                     await self._push_task_to_request_queue(task, spider_name)
 
     async def make_tasks(self):
@@ -335,7 +340,7 @@ class Scheduler(HandlerMixin):
 
             elif task['spider_name'] in self.spider_paused:
                 # persist
-                dump_task(task, catty.config.DUMP_PATH, 'scheduler', task['spider_name'])
+                dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler', task['spider_name'])
             elif task['spider_name'] in self.spider_stopped:
                 pass
             elif task['spider_name'] in self.spider_todo:
@@ -425,7 +430,7 @@ class Selector:
                     # if speed bigger than 1,means that at last 1 request per sec.
                     if self.spider_speed[spider_name] > 1:
                         for i in range(self.spider_speed[spider_name]):
-                            requests_q = self.requests_queue.get(catty.config.REQUEST_QUEUE_FORMAT.format(spider_name))
+                            requests_q = self.requests_queue.get("{}:requests".format(spider_name))
                             if requests_q:
                                 task = await get_task(requests_q)
                                 if task:
@@ -433,11 +438,12 @@ class Selector:
                                         await push_task(self.scheduler_downloader_queue, task, self.loop)
                                         self.logger.log_it('[select_task]{} tid:{}'.format(spider_name, task['tid']))
                                     elif task['spider_name'] in self.spider_paused:
-                                        dump_task(task, catty.config.DUMP_PATH, 'scheduler', task['spider_name'])
+                                        dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler',
+                                                  task['spider_name'])
                                     elif task['spider_name'] in self.spider_stopped:
                                         pass
                     else:
-                        requests_q = self.requests_queue.get(catty.config.REQUEST_QUEUE_FORMAT.format(spider_name))
+                        requests_q = self.requests_queue.get("{}:requests".format(spider_name))
                         if requests_q:
                             task = await get_task(requests_q)
                             if task:
@@ -445,7 +451,8 @@ class Selector:
                                     await push_task(self.scheduler_downloader_queue, task, self.loop)
                                     self.logger.log_it('[select_task]{} tid:{}'.format(spider_name, task['tid']))
                                 elif task['spider_name'] in self.spider_paused:
-                                    dump_task(task, catty.config.DUMP_PATH, 'scheduler', task['spider_name'])
+                                    dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler',
+                                              task['spider_name'])
                                 elif task['spider_name'] in self.spider_stopped:
                                     pass
 
@@ -516,7 +523,7 @@ class Tasker(object):
         callback = request['callback']
         meta = request['meta']
 
-        tid = md5string(request['request']['url'] + str(request['request']['data']))
+        tid = md5string(request['request']['url'] + str(request['request']['data']) + str(request['request']['params']))
 
         return PriorityDict({
             'tid': tid,

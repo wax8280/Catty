@@ -5,43 +5,58 @@
 #         http://blog.vincentzhong.cn
 # Created on 2017/04/22 09:21
 
+# 当读取队列为满或空时的等待时间
 LOAD_QUEUE_INTERVAL = 1
+# SELECTOR扫描一次的时间间隔
 SELECTOR_INTERVAL = 1
 
-REQUEST_QUEUE_FORMAT = "{}:requests"
-
+# Spider的默认配置
 SPIDER_DEFAULT = {
-    'SPEED': 1
+    # 默认速度
+    'SPEED': 1,
+    # BloomFilter的默认种子
+    'SEEDS': ["HELLO", "WORLD", "CATTY", "PYTHON", "APPLE", "THIS", "THAT", "MY", "HI", "NOT"],
+    # BloomFilter的分块
+    'BLOCKNUM': 1
 }
 
+# 默认的HTTP请求头部
 DEFAULT_HEADERS = {}
 
-SPIDER_PATH = '../test/spider'
+# Spider脚步的路径
+SPIDER_PATH = '../tests/spider'
+# 日志文件的路径
 LOG_PATH = '../log'
-DUMP_PATH = '../data/dump'
 
+# 队列的默认配置
 QUEUE = {
+    # 最大队列长度
     'MAX_SIZE': 100000
 }
 
+# 持久化的配置
 PERSISTENCE = {
-    'PERSIST_BEFORE_EXIT': False
+    # 是否持久化Task
+    'PERSIST_BEFORE_EXIT': False,
+    # 持久化文件的路径
+    'DUMP_PATH': '../data/dump'
 }
 
+# Handler的端口配置
 PORT = {
     'SCHEDULER': 38383,
     'PARSER': 38384
 }
 
+# Handler之间的进程通信的AuthKey
 AUTHKEY = b'hello'
 
-DUPE_FILTER = {
-    'SEEDS': ["HELLO", "WORLD", "CATTY", "PYTHON", "APPLE", "THIS", "THAT", "MY", "HI", "NOT"],
-    'BLOCKNUM': 1
-}
-
+# Downloader的配置
 DOWNLOADER = {
+    # 全局链接并发数
     'CONN_LIMIT': 10000,
+    # 单一域名最大并发数
     'LIMIT_PER_HOST': 10000,
+    # 请求完成后强制关闭链接
     'FORCE_CLOSE': True
 }

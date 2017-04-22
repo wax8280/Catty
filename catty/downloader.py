@@ -121,4 +121,4 @@ class DownLoader:
             self.loop.create_task(self.start_crawler())
             self.loop.run_forever()
         except KeyboardInterrupt:
-            self.logger.log_it("Bey", level='INFO')
+            self.logger.log_it("Bye!", level='INFO')

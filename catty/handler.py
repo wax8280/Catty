@@ -120,10 +120,10 @@ class HandlerClient:
 
     def action(self, action_type: str, spider_name: str, param: str = '') -> dict:
         """Handle action such as 'run','start','set speed'..."""
-        if action_type == 'set_speed':
+        if action_type in ['set_speed', 'clean_dupe_filter', 'clean_request_queue']:
             result = json.loads(self._send_scheduler(json.dumps({
                 'type': action_type, 'spider_name': spider_name, 'spider_speed': param})))
-        elif action_type in ['start', 'run', 'pause', 'stop', 'clean_request_queue', 'update_spider', 'delete_spider']:
+        elif action_type in ['start', 'run', 'pause', 'stop', 'update_spider', 'delete_spider']:
             result = json.loads(self._send(json.dumps({
                 'type': action_type,
                 'spider_name': spider_name
@@ -312,17 +312,25 @@ class HandlerMixin:
             self.spider_module_handle.update_spider(spider_name)
             if '.py' in spider_name:
                 self.spider_todo.add(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name)
-                self.selector.update_speed(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name, 1)
+                self.selector.update_speed(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name,
+                                           1)
         except Exception:
             return -1, {'msg': traceback.format_exc()}
         return 0, {}
 
     def handle_delete_spider(self: "Scheduler", spider_name: str) -> tuple:
         # TODO clean queue
+        if spider_name in self.spider_started or (self.name == 'Scheduler' and spider_name in self.spider_ready_start):
+            return -1, {'msg': "Please stop the spider first."}
         try:
-            self.handle_clean_request_queue(spider_name)
-            self.handle_clean_dupe_filter(spider_name)
-            self.spider_module_handle.handle_delete_spider(spider_name)
+            if self.name == 'Scheduler':
+                self.handle_clean_request_queue(spider_name)
+                self.handle_clean_dupe_filter(spider_name)
+                set_safe_remove(self.spider_todo, spider_name)
+
+            set_safe_remove(self.spider_stopped, spider_name)
+            set_safe_remove(self.spider_paused, spider_name)
+            self.spider_module_handle.delete_spider(spider_name)
         except Exception:
             return -1, {'msg': traceback.format_exc()}
 
@@ -363,6 +371,8 @@ class HandlerMixin:
                             r = self.handle_set_speed(msg['spider_name'], msg['spider_speed'])
                         elif msg['type'] == 'clean_request_queue':
                             r = self.handle_clean_request_queue(msg['spider_name'])
+                        elif msg['type'] == 'clean_dupe_filter':
+                            r = self.handle_clean_dupe_filter(msg['spider_name'])
 
                     if self.name == 'Parser':
                         if msg['type'] == 'handle_count':

@@ -12,7 +12,7 @@ from flask import render_template
 from flask import request
 
 import catty.config
-from catty import HandlerClient
+from catty.handler import HandlerClient
 
 app = Flask(__name__)
 app.debug = True

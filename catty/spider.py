@@ -6,12 +6,13 @@
 # Created on 2017/2/24 14:26
 from catty.libs.request import Request
 import abc
+import catty.config
 
 
 class BaseSpider(metaclass=abc.ABCMeta):
-    speed = 1
-    seeds = ["HELLO", "WORLD", "CATTY", "PYTHON", "APPLE", "THIS", "THAT", "MY", "HI", "NOT"]
-    blocknum = 1
+    speed = catty.config.SPIDER_DEFAULT['SPEED']
+    seeds = catty.config.SPIDER_DEFAULT['SEEDS']
+    blocknum = catty.config.SPIDER_DEFAULT['BLOCKNUM']
 
     @abc.abstractmethod
     def start(self):

@@ -51,7 +51,7 @@ class Parser(HandlerMixin):
         self.spider_module_handle = SpiderModuleHandle(catty.config.SPIDER_PATH)
         self.spider_module_handle.load_all_spider()
 
-        self.logger = Log('')
+        self.logger = Log('Parser')
         self.done_all_things = False
         self.counter = Counter(loop)
 
@@ -64,7 +64,7 @@ class Parser(HandlerMixin):
         """load the persist task & push it to request-queue"""
         # TODO dump downloader-parser queue
         # load the parser_scheduler dumped files.
-        tasks = [load_task(catty.config.DUMP_PATH, 'parser_scheduler', spider_name) for spider_name in self.spider_started]
+        tasks = [load_task(catty.config.PERSISTENCE['DUMP_PATH'], 'parser_scheduler', spider_name) for spider_name in self.spider_started]
         self.logger.log_it("[load_task]Load tasks:{}".format(tasks))
 
         if tasks and tasks[0] is not None:
@@ -77,7 +77,7 @@ class Parser(HandlerMixin):
         counter_date = {'value_d': self.counter.value_d,
                         'cache_value': self.counter.cache_value}
         p = pickle.dumps(counter_date)
-        root = os.path.join(catty.config.DUMP_PATH, 'parser')
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser')
         if not os.path.exists(root):
             os.mkdir(root)
         path = os.path.join(root, 'counter')
@@ -87,7 +87,7 @@ class Parser(HandlerMixin):
         return True
 
     def load_count(self):
-        path = os.path.join(os.path.join(catty.config.DUMP_PATH, 'parser'), 'counter')
+        path = os.path.join(os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser'), 'counter')
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 t = f.read()
@@ -104,7 +104,7 @@ class Parser(HandlerMixin):
             'spider_stopped': self.spider_stopped
         }
         p = pickle.dumps(status)
-        root = os.path.join(catty.config.DUMP_PATH, 'parser')
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser')
         if not os.path.exists(root):
             os.mkdir(root)
         path = os.path.join(root, 'status')
@@ -114,7 +114,7 @@ class Parser(HandlerMixin):
         return True
 
     def load_status(self):
-        path = os.path.join(os.path.join(catty.config.DUMP_PATH, 'parser'), 'status')
+        path = os.path.join(os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser'), 'status')
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 t = f.read()
@@ -136,7 +136,7 @@ class Parser(HandlerMixin):
         ret = True
         if catty.config.PERSISTENCE['PERSIST_BEFORE_EXIT']:
             while await self.parser_scheduler_queue.qsize():
-                ret &= dump_task(await get_task(self.parser_scheduler_queue), catty.config.DUMP_PATH, 'parser_scheduler',
+                ret &= dump_task(await get_task(self.parser_scheduler_queue), catty.config.PERSISTENCE['DUMP_PATH'], 'parser_scheduler',
                                  'Default')
 
         ret &= self.dump_count()
@@ -207,7 +207,7 @@ class Parser(HandlerMixin):
                                 traceback.print_exc()
                 elif task['spider_name'] in self.spider_paused:
                     # persist
-                    dump_task(task, catty.config.DUMP_PATH, 'parser_scheduler', task['spider_name'])
+                    dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'parser_scheduler', task['spider_name'])
                 elif task['spider_name'] in self.spider_stopped:
                     pass
             else:

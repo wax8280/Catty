@@ -110,9 +110,9 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         return pickle.loads(result[0])
 
     async def put(self, item):
-        is_full = await self.full()
-        if is_full:
-            raise self.Full
+        # is_full = await self.full()
+        # if is_full:
+        #     raise self.Full
 
         if isinstance(item, tuple):
             priority = -item[0]

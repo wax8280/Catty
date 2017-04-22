@@ -60,3 +60,9 @@ DOWNLOADER = {
     # 请求完成后强制关闭链接
     'FORCE_CLOSE': True
 }
+
+WEBUI = {
+    'AUTH': True,
+    'USER': 'test',
+    'PW': 'test',
+}

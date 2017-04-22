@@ -430,7 +430,10 @@ class Selector:
                     # if speed bigger than 1,means that at last 1 request per sec.
                     if self.spider_speed[spider_name] > 1:
                         for i in range(self.spider_speed[spider_name]):
-                            requests_q = self.requests_queue.get("{}:requests".format(spider_name))
+                            requests_q = self.requests_queue.setdefault(
+                                "{}:requests".format(spider_name),
+                                AsyncRedisPriorityQueue("{}:requests".format(spider_name), loop=self.loop)
+                            )
                             if requests_q:
                                 task = await get_task(requests_q)
                                 if task:
@@ -443,7 +446,10 @@ class Selector:
                                     elif task['spider_name'] in self.spider_stopped:
                                         pass
                     else:
-                        requests_q = self.requests_queue.get("{}:requests".format(spider_name))
+                        requests_q = self.requests_queue.setdefault(
+                            "{}:requests".format(spider_name),
+                            AsyncRedisPriorityQueue("{}:requests".format(spider_name), loop=self.loop)
+                        )
                         if requests_q:
                             task = await get_task(requests_q)
                             if task:

@@ -166,7 +166,9 @@ class HandlerMixin:
 
         # Dump request queue
         if self.name == 'Scheduler':
-            self.loop.create_task(self.dump_persist_request_queue_task(spider_name))
+            self.loop.create_task(self.dump_persist_task(spider_name))
+
+        # Dump the parser in the make_task
 
         return code, msg
 
@@ -225,8 +227,7 @@ class HandlerMixin:
         self._logger.log_it("[run_spider]Success spider:{}".format(spider_name))
 
         # load the persist file
-        if self.name == 'Scheduler':
-            self.loop.create_task(self.load_persist_request_queue_task(spider_name))
+        self.loop.create_task(self.load_persist_task(spider_name))
 
         return code, msg
 
@@ -263,13 +264,8 @@ class HandlerMixin:
                 self.spider_ready_start.add(spider_name)
         elif self.name == 'Parser':
             self.spider_started.add(spider_name)
-
+        # TODO:delete the dump files
         self._logger.log_it("[start_spider]Success spider:{}".format(spider_name))
-
-        # load the persist file
-        if self.name == 'Scheduler':
-            self.loop.create_task(self.load_persist_request_queue_task(spider_name))
-
         return code, msg
 
     # --------------------------------------------------------------------
@@ -288,6 +284,7 @@ class HandlerMixin:
         return 0, self.selector.spider_speed
 
     def handle_count(self: "Parser") -> tuple:
+        print(self.counter.cache_value)
         return 0, self.counter.count_all()
 
     # ---------------------------------------------------------------------
@@ -319,7 +316,6 @@ class HandlerMixin:
         return 0, {}
 
     def handle_delete_spider(self: "Scheduler", spider_name: str) -> tuple:
-        # TODO clean queue
         if spider_name in self.spider_started or (self.name == 'Scheduler' and spider_name in self.spider_ready_start):
             return -1, {'msg': "Please stop the spider first."}
         try:
@@ -337,6 +333,13 @@ class HandlerMixin:
         for spider_set in self.all_spider_set:
             if spider_name in spider_set:
                 spider_set.remove(spider_name)
+
+        self.loop.create_task(self.clean_queue(spider_name))
+        self.loop.create_task(self.clean_dupefilter(spider_name))
+        try:
+            self.bloom_filter.pop(spider_name)
+        except KeyError:
+            pass
 
         return 0, {}
 

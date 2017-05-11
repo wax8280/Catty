@@ -17,7 +17,6 @@ from copy import deepcopy
 import catty.config
 from catty.message_queue import AsyncRedisPriorityQueue, get_task, push_task
 from catty.handler import HandlerMixin
-from catty.config import LOAD_QUEUE_INTERVAL
 from catty.exception import Retry_current_task
 from catty.libs.count import Counter
 from catty.libs.handle_module import SpiderModuleHandle
@@ -31,9 +30,9 @@ class Parser(HandlerMixin):
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
                  loop: BaseEventLoop):
         """
-        :param downloader_parser_queue:         AsyncRedisPriorityQueue     The redis queue
-        :param parser_scheduler_queue:          AsyncRedisPriorityQueue     The redis queue
-        :param loop:                            BaseEventLoop               EventLoop
+        :param downloader_parser_queue:The redis queue
+        :param parser_scheduler_queue:The redis queue
+        :param loop:EventLoop
         """
         super(Parser, self).__init__()
         self.name = 'Parser'
@@ -55,23 +54,22 @@ class Parser(HandlerMixin):
         self.done_all_things = False
         self.counter = Counter(loop)
 
-    async def conn_redis(self):
-        """Conn the redis"""
-        await self.downloader_parser_queue.conn()
-        await self.parser_scheduler_queue.conn()
-
-    async def load_persist_task(self):
-        """load the persist task & push it to request-queue"""
-        # TODO dump downloader-parser queue
-        # load the parser_scheduler dumped files.
-        tasks = [load_task(catty.config.PERSISTENCE['DUMP_PATH'], 'parser_scheduler', spider_name) for spider_name in self.spider_started]
+    async def load_persist_task(self, spider_name: str):
+        """load the persist task & push it to queue"""
+        tasks = load_task(catty.config.PERSISTENCE['DUMP_PATH'], 'parser', spider_name)
         self.logger.log_it("[load_task]Load tasks:{}".format(tasks))
 
-        if tasks and tasks[0] is not None:
-            for spider_tasks in tasks:
-                for each_task in spider_tasks:
-                    # push each task to parser-scheduler queue
-                    await push_task(self.parser_scheduler_queue, each_task, self.loop)
+        if tasks is not None:
+            for each_task in tasks:
+                # push each task to request-queue
+                await push_task(self.parser_scheduler_queue, each_task, self.loop)
+
+    async def dump_persist_task(self):
+        """dump the paused-spider's queue & dump it"""
+        # TODO:async dump
+        while await self.parser_scheduler_queue.qsize():
+            task = await get_task(self.parser_scheduler_queue)
+            dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'parser', task['spider_name'])
 
     def dump_count(self):
         counter_date = {'value_d': self.counter.value_d,
@@ -83,7 +81,7 @@ class Parser(HandlerMixin):
         path = os.path.join(root, 'counter')
         with open(path, 'wb') as f:
             f.write(p)
-        self.logger.log_it("[load_count]{}".format(counter_date))
+        self.logger.log_it("[dump_count]{}".format(counter_date))
         return True
 
     def load_count(self):
@@ -128,23 +126,38 @@ class Parser(HandlerMixin):
 
     def on_begin(self):
         """Run before begin to do something like load tasks,or load config"""
-        self.load_count()
         self.load_status()
+        self.load_count()
+
+    async def check_end(self):
+        done = []
+        while not done or False in done:
+            done = []
+            q = await self.parser_scheduler_queue.qsize()
+            if q == 0 or q is None:
+                await asyncio.sleep(0.5, self.loop)
+                done.append(True)
+            else:
+                done.append(False)
+
+        self.done_all_things = True
 
     async def on_end(self):
         """Run when exit to do something like dump queue etc... It make self.done_all_things=True in last """
-        ret = True
-        if catty.config.PERSISTENCE['PERSIST_BEFORE_EXIT']:
-            while await self.parser_scheduler_queue.qsize():
-                ret &= dump_task(await get_task(self.parser_scheduler_queue), catty.config.PERSISTENCE['DUMP_PATH'], 'parser_scheduler',
-                                 'Default')
+        for task in asyncio.Task.all_tasks():
+            task.cancel()
 
-        ret &= self.dump_count()
-        ret &= self.dump_status()
-        self.done_all_things = True
+        # TODO dump downloader-parser queue
+        if catty.config.PERSISTENCE['PERSIST_BEFORE_EXIT']:
+            self.loop.create_task(self.dump_persist_task())
+
+        self.dump_count()
+        self.dump_status()
+
+        self.loop.create_task(self.check_end())
 
     async def _run_ins_func(self, spider_name: str, method_name: str, task: dict):
-        """run the spider_ins boned method to parser it & push it to parser-request queue"""
+        """run the spider_ins boned method to parser it & push it to parser-scheduler queue"""
         self.logger.log_it("[_run_ins_func]Parser the {}.{}".format(spider_name, method_name))
         _response = task['response']
         try:
@@ -160,18 +173,29 @@ class Parser(HandlerMixin):
         # get the method'parms
         _signature = inspect.signature(method).parameters
 
-        if 'loop' in _signature:
-            if 'task' in _signature:
-                parser_return = await method(_response, task=task, loop=self.loop)
+        try:
+            # the async method define by user must have a loop param even never use it.
+            if 'loop' in _signature:
+                if 'task' in _signature:
+                    parser_return = await method(_response, task=task, loop=self.loop)
+                else:
+                    parser_return = await method(_response, loop=self.loop)
             else:
-                parser_return = await method(_response, loop=self.loop)
-        else:
-            if 'task' in _signature:
-                parser_return = method(_response, task=task)
-            else:
-                parser_return = method(_response)
+                if 'task' in _signature:
+                    parser_return = method(_response, task=task)
+                else:
+                    parser_return = method(_response)
+        except Retry_current_task:
+            # handle it like a new task
+            self.loop.create_task(push_task(self.parser_scheduler_queue, task, self.loop))
+            return
+        except:
+            # The except from user spiders
+            traceback.print_exc()
+            return
 
         # if return a dict(normal)
+        # TODO:accept the task in return
         if isinstance(parser_return, dict):
             task['parser'].update({'item': parser_return})
             await push_task(self.parser_scheduler_queue, task, self.loop)
@@ -180,12 +204,9 @@ class Parser(HandlerMixin):
 
     async def make_tasks(self):
         """run the done task & push them"""
-        # FIXME as some as Scheduler
         task = await get_task(self.downloader_parser_queue)
         if task:
-            self.loop.create_task(
-                self.make_tasks()
-            )
+            self.loop.create_task(self.make_tasks())
             if 200 <= task['response']['status'] < 400:
                 self.counter.add_success(task['spider_name'])
                 if task['spider_name'] in self.spider_started:
@@ -197,17 +218,11 @@ class Parser(HandlerMixin):
                         parser_method_name = callback_method_name.get('parser', None)
 
                         if parser_method_name:
-                            try:
-                                await self._run_ins_func(spider_name, parser_method_name, each_task)
-                            except Retry_current_task:
-                                # handle it like a new task
-                                await push_task(self.parser_scheduler_queue, each_task, self.loop)
-                            except:
-                                # The except from user spiders
-                                traceback.print_exc()
+                            self.loop.create_task(self._run_ins_func(spider_name, parser_method_name, each_task))
+
                 elif task['spider_name'] in self.spider_paused:
                     # persist
-                    dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'parser_scheduler', task['spider_name'])
+                    dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'parser', task['spider_name'])
                 elif task['spider_name'] in self.spider_stopped:
                     pass
             else:
@@ -215,19 +230,23 @@ class Parser(HandlerMixin):
                 self.counter.add_fail(task['spider_name'])
 
         else:
-            await asyncio.sleep(LOAD_QUEUE_INTERVAL, loop=self.loop)
+            await asyncio.sleep(catty.config.LOAD_QUEUE_INTERVAL, loop=self.loop)
 
-            self.loop.create_task(
-                self.make_tasks()
-            )
+            self.loop.create_task(self.make_tasks())
+
+    def quit(self):
+        self.logger.log_it("[Ending]Doing the last thing...")
+        self.loop.create_task(self.on_end())
+        while not self.done_all_things:
+            time.sleep(1)
+        self.logger.log_it("Bye!")
+        os._exit(0)
 
     def run_parser(self):
-        self.loop.create_task(self.make_tasks())
+        for i in range(catty.config.NUM_OF_PARSER_MAKE_TASK):
+            self.loop.create_task(self.make_tasks())
         self.loop.create_task(self.counter.update())
         self.loop.run_forever()
-
-    def run_persist(self):
-        self.loop.create_task(self.load_persist_task())
 
     def run(self):
         try:
@@ -236,14 +255,13 @@ class Parser(HandlerMixin):
             handler_server_thread.start()
             parser_thread = threading.Thread(target=self.run_parser)
             parser_thread.start()
-            parser_thread.join()
+            # parser_thread.join()
+            while True:
+                r = input()
+                if r == 'Q':
+                    self.quit()
         except KeyboardInterrupt:
-            self.logger.log_it("[Ending]Doing the last thing...")
-            self.loop.create_task(self.on_end())
-            while not self.done_all_things:
-                time.sleep(1)
-            self.logger.log_it("Bye!")
-            os._exit(0)
+            self.quit()
 
 
 class BaseParser(object):

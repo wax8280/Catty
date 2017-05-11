@@ -10,6 +10,9 @@ LOAD_QUEUE_INTERVAL = 1
 # SELECTOR扫描一次的时间间隔
 SELECTOR_INTERVAL = 1
 
+NUM_OF_PARSER_MAKE_TASK = 5
+NUM_OF_SCHEDULER_MAKE_TASK = 5
+
 # Spider的默认配置
 SPIDER_DEFAULT = {
     # 默认速度
@@ -24,9 +27,22 @@ SPIDER_DEFAULT = {
 DEFAULT_HEADERS = {}
 
 # Spider脚步的路径
-SPIDER_PATH = '../tests/spider'
+SPIDER_PATH = './tests/spider'
 # 日志文件的路径
-LOG_PATH = '../log'
+LOG_PATH = './log'
+
+"""
+Log level
+CRITICAL = 50
+FATAL = CRITICAL
+ERROR = 40
+WARNING = 30
+WARN = WARNING
+INFO = 20
+DEBUG = 10
+NOTSET = 0
+"""
+LOG_LEVEL = 20
 
 # 队列的默认配置
 QUEUE = {
@@ -37,9 +53,9 @@ QUEUE = {
 # 持久化的配置
 PERSISTENCE = {
     # 是否持久化Task
-    'PERSIST_BEFORE_EXIT': False,
+    'PERSIST_BEFORE_EXIT': True,
     # 持久化文件的路径
-    'DUMP_PATH': '../data/dump'
+    'DUMP_PATH': './data/dump'
 }
 
 # Handler的端口配置

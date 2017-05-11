@@ -28,11 +28,11 @@ class DownLoader:
                  limit_per_host: int,
                  force_close: bool):
         """
-        :param scheduler_downloader_queue:      AsyncRedisPriorityQueue     The redis queue
-        :param downloader_parser_queue:         AsyncRedisPriorityQueue     The redis queue
-        :param loop:                            BaseEventLoop               EventLoop
-        :param conn_limit:                      int                         Limit of The total number for simultaneous connections.
-        :param limit_per_host                   int                         The limit for simultaneous connections to the same endpoint(host, port, is_ssl).
+        :param scheduler_downloader_queue:The redis queue
+        :param downloader_parser_queue:The redis queue
+        :param loop:EventLoop
+        :param conn_limit:Limit of The total number for simultaneous connections.
+        :param limit_per_host:The limit for simultaneous connections to the same endpoint(host, port, is_ssl).
         """
         self.scheduler_downloader_queue = scheduler_downloader_queue
         self.downloader_parser_queue = downloader_parser_queue
@@ -42,7 +42,8 @@ class DownLoader:
         self.aio_conn = aiohttp.TCPConnector(limit=conn_limit,
                                              loop=self.loop,
                                              verify_ssl=False,
-                                             limit_per_host=limit_per_host,
+                                             # limit_per_host=limit_per_host,
+                                             # deserted in aiohttp lasted version
                                              force_close=force_close)
         self.count = 0
         self.logger = Log('Downloader')
@@ -50,8 +51,8 @@ class DownLoader:
     async def _request(self, aio_request: Request, loop: BaseEventLoop, connector: BaseConnector) -> Response:
         """The real request.It return the Response obj with status 99999 as fail"""
         t_ = time.time()
+        self.logger.log_it("Downloading url:{} data:{}".format(aio_request.url, aio_request.data))
         try:
-            self.logger.log_it("Downlaoding url:{} data:{}".format(aio_request.url, aio_request.data))
             async with aiohttp.request(**aio_request.dump_request(), loop=loop, connector=connector) as client:
                 response = Response(
                     # TODO text accept encoding param to encode the body
@@ -71,10 +72,7 @@ class DownLoader:
         except Exception as e:
             self.logger.log_it("Fail to download url:{} data:{}\nErrInfo:{}".format(aio_request.url, aio_request.data,
                                                                                     traceback.format_exc()))
-            response = Response(
-                status=99999,
-                body=str(e),
-            )
+            response = Response(status=99999, body=str(e), )
 
         self.count -= 1
         return response
@@ -100,21 +98,17 @@ class DownLoader:
         if task is not None:
             self.count += 1
             aio_request = task['request']
-            self.loop.create_task(
-                self.request(
-                    aio_request=aio_request,
-                    task=task)
-            )
+            self.loop.create_task(self.request(aio_request=aio_request, task=task))
+
+            # The limit of concurrent request
             while self.count > self.conn_limit:
                 await asyncio.sleep(0.5, loop=self.loop)
-            self.loop.create_task(
-                self.start_crawler()
-            )
+
+            self.loop.create_task(self.start_crawler())
         else:
+            # If the queue is empty,wait and try again.
             await asyncio.sleep(catty.config.LOAD_QUEUE_INTERVAL, loop=self.loop)
-            self.loop.create_task(
-                self.start_crawler()
-            )
+            self.loop.create_task(self.start_crawler())
 
     def run(self):
         try:

@@ -7,9 +7,11 @@ $(document).ready(function () {
         var spider_name = $(this).data('spider_name');
         var action_type = $(this).data('action_type');
         var param = $(this).attr('param');
-        $.get("./action?action_type=" + action_type + "&spider_name=" + spider_name + "&param=" + param, function (data, status) {
+        $.get("./action?action_type=" + action_type + "&spider_name=" + spider_name + "&param=" + param,
+            function (data, status) {
             UIkit.modal.alert("数据：" + data + "\n状态：" + status);
         });
+        // location.reload();
     });
 
     $(".speed").click(function () {

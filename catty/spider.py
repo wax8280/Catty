@@ -4,9 +4,11 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/2/24 14:26
-from catty.libs.request import Request
 import abc
+
 import catty.config
+from catty.libs.request import Request
+from catty.libs.tasker import Tasker
 
 
 class BaseSpider(metaclass=abc.ABCMeta):
@@ -40,11 +42,10 @@ class BaseSpider(metaclass=abc.ABCMeta):
         meta.setdefault('retry_wait', 3)
         meta.setdefault('dupe_filter', False)
 
-        _d = {
+        return Tasker.make_task({
             'spider_name': self.name,
             'callback': n_callback,
             'request': request,
             'meta': meta,
             'priority': kwargs.get('priority', 0),
-        }
-        return _d
+        })

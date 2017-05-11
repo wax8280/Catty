@@ -54,13 +54,17 @@ class PriorityDict(dict):
         return self['priority'] < other['priority']
 
 
+class Task(PriorityDict):
+    pass
+
+
 def get_eventloop():
-    try:
-        import uvloop
-        return uvloop.new_event_loop()
-    except ImportError:
-        import asyncio
-        return asyncio.get_event_loop()
+    # try:
+    #     import uvloop
+    #     return uvloop.new_event_loop()
+    # except ImportError:
+    import asyncio
+    return asyncio.get_event_loop()
 
 
 def dump_task(task, dump_path, dump_type, spider_name):
@@ -84,7 +88,7 @@ def dump_task(task, dump_path, dump_type, spider_name):
     return True
 
 
-def load_task(dump_path, dump_type, spider_name, delete=False):
+def load_task(dump_path, dump_type, spider_name, delete=True):
     """load task in sqlite"""
     path = os.path.join(os.path.join(dump_path, dump_type), spider_name)
     if os.path.exists(path):

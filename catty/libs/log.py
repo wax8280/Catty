@@ -41,7 +41,7 @@ class BaseLog(object):
             stream_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
             logger.addHandler(stream_handler)
-            logger.setLevel(logging.DEBUG)
+            logger.setLevel(catty.config.LOG_LEVEL)
             BaseLog.logger_dict[logger_name] = logger
         return BaseLog.logger_dict[logger_name]
 

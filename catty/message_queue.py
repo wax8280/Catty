@@ -67,7 +67,10 @@ class BaseAsyncQueue(object):
         raise NotImplementedError
 
     async def clear(self):
-        await self.redis_conn.delete(self.name)
+        try:
+            await self.redis_conn.delete(self.name)
+        except:
+            pass
 
 
 class AsyncRedisPriorityQueue(BaseAsyncQueue):
@@ -83,8 +86,7 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
             self.last_qsize = await self.redis_conn.zcard(self.name)
             return self.last_qsize
         except:
-            await self.conn()
-            self.loop.create_task(self.qsize())
+            pass
 
     async def empty(self):
         qsize = await self.qsize()
@@ -110,10 +112,10 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
         return pickle.loads(result[0])
 
     async def put(self, item):
+        # FIXME:the limit of queue size make out of memory
         # is_full = await self.full()
         # if is_full:
         #     raise self.Full
-
         if isinstance(item, tuple):
             priority = -item[0]
             item = item[1]
@@ -127,11 +129,12 @@ async def get_task(q):
     """
     Get a task from queue.
     :param q:       Redis-Queue
-    :return:        Task
     """
     try:
         t = await q.get()
         return t
+    except AttributeError:
+        await q.conn()
     except AsyncQueueEmpty:
         return
     except Exception:
@@ -144,14 +147,16 @@ async def push_task(q, task, loop):
     """
     Push a task to ququq
     :param q:       Redis-Queue
-    :param task:    Task
     """
     done = False
     while not done:
         try:
-            await q.put(task)
-            done = True
+            if await q.put(task):
+                done = True
+        except AttributeError:
+            await q.conn()
         except AsyncQueueFull:
+            # FIXME:when the queue full,it run put method all over and all over,it will out of memory
             await asyncio.sleep(catty.config.LOAD_QUEUE_INTERVAL, loop=loop)
         except Exception:
             traceback.print_exc()

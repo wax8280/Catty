@@ -76,7 +76,10 @@ class RedisBloomFilter(object):
     async def clean(self):
         for i in range(self.blockNum):
             key = self.key + ':' + str(i)
-            await self.redis_conn.delete(key)
+            try:
+                await self.redis_conn.delete(key)
+            except:
+                pass
 
     async def is_contain(self, string):
         if isinstance(string, str):

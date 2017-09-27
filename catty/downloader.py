@@ -45,6 +45,8 @@ class DownLoader:
                                              # limit_per_host=limit_per_host,
                                              # deserted in aiohttp lasted version
                                              force_close=force_close)
+
+        # using in conn_limit
         self.count = 0
         self.logger = Log('Downloader')
 
@@ -77,20 +79,30 @@ class DownLoader:
         self.count -= 1
         return response
 
+    async def fail_callback(self, task: dict, aio_request: Request):
+        retry = task['meta']['retry']
+        retried = task.get('retried', 0)
+        if retry != 0 and retried < retry:
+            task.update({'retried': retried + 1})
+            self.logger.log_it("Retry url:{} body:{} retried:{}".format(aio_request.url, aio_request.data, retried))
+            # retry wait
+            await asyncio.sleep(task['meta']['retry_wait'], self.loop)
+            await push_task(self.scheduler_downloader_queue, task, self.loop)
+
+    async def success_callback(self, task: dict, response: Response):
+        task.update({'response': response})
+        await push_task(self.downloader_parser_queue, task, self.loop)
+
     async def request(self, aio_request: Request, task: dict):
         """request,update the task and put it in the queue"""
         response = await self._request(aio_request, self.loop, self.aio_conn)
+        # TODO:99999 means catch exception during request(or we should uniform the status code and write a doc)
         if response['status'] != 99999:
-            task.update({'response': response})
-            await push_task(self.downloader_parser_queue, task, self.loop)
+            # success
+            await self.success_callback(task, response)
         else:
-            retry = task['meta']['retry']
-            retried = task.get('retried', 0)
-            if retry != 0 and retried < retry:
-                task.update({'retried': retried + 1})
-                self.logger.log_it("Retry url:{} body:{} retried:{}".format(aio_request.url, aio_request.data, retried))
-                await asyncio.sleep(task['meta']['retry_wait'], self.loop)
-                await push_task(self.scheduler_downloader_queue, task, self.loop)
+            # fail
+            await self.fail_callback(task, aio_request)
 
     async def start_crawler(self):
         """get item from queue and crawl it & push it to queue at last"""

@@ -29,6 +29,7 @@ class Parser(HandlerMixin):
     def __init__(self,
                  downloader_parser_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
+                 scheduler_downloader_queue: AsyncRedisPriorityQueue,
                  loop: BaseEventLoop):
         """
         :param downloader_parser_queue:The redis queue
@@ -40,6 +41,7 @@ class Parser(HandlerMixin):
 
         self.downloader_parser_queue = downloader_parser_queue
         self.parser_scheduler_queue = parser_scheduler_queue
+        self.scheduler_downloader_queue = scheduler_downloader_queue
         self.loop = loop
 
         self.spider_started = set()
@@ -84,7 +86,7 @@ class Parser(HandlerMixin):
 
         if task is not None:
             await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], "{}_{}".format(self.name, which_q),
-                      task['spider_name'])
+                            task['spider_name'])
             self.logger.log_it("[dump_task]Dump task:{}".format(task))
 
     def dump_count(self):
@@ -180,10 +182,8 @@ class Parser(HandlerMixin):
 
         self.loop.create_task(self.check_end())
 
-    async def _run_ins_func(self, spider_name: str, method_name: str, task: dict):
-        """run the spider_ins boned method to parser it & push it to parser-scheduler queue"""
-        self.logger.log_it("[_run_ins_func]Parser the {}.{}".format(spider_name, method_name))
-        _response = task['response']
+    def get_spider_method(self, spider_name: str, method_name: str):
+        """Return a bound method if spider have this method,return None if not."""
         try:
             # get the instantiation spider from dict
             spider_ins = self.spider_module_handle.spider_instantiation[spider_name]
@@ -194,6 +194,14 @@ class Parser(HandlerMixin):
         # get the spider's method from name
         method = spider_ins.__getattribute__(method_name)
 
+        return method
+
+    async def _run_ins_func(self, spider_name: str, method_name: str, task: dict):
+        """run the spider_ins boned method to parser it & push it to parser-scheduler queue"""
+        self.logger.log_it("[_run_ins_func]Parser the {}.{}".format(spider_name, method_name))
+        _response = task['response']
+
+        method = self.get_spider_method(spider_name, method_name)
         # get the method'parms
         _signature = inspect.signature(method).parameters
 
@@ -218,11 +226,12 @@ class Parser(HandlerMixin):
             traceback.print_exc()
             return
 
-        # if return a dict(normal)
-        # TODO:accept the task in return
         if isinstance(parser_return, dict):
             task['parser'].update({'item': parser_return})
             await push_task(self.parser_scheduler_queue, task, self.loop)
+        elif isinstance(parser_return, list):
+            for each_return_task in parser_return:
+                await push_task(self.scheduler_downloader_queue, each_return_task, self.loop)
         elif parser_return is None:
             pass
 
@@ -251,7 +260,13 @@ class Parser(HandlerMixin):
                     elif task['spider_name'] in self.spider_stopped:
                         pass
                 else:
-                    # TODO retry it or do somethings else.(define in parser class)
+                    retry_method = self.get_spider_method(task['spider_name'], 'retry')
+                    # it could be return a list
+                    retry_tasks = retry_method(task)
+                    if not isinstance(retry_tasks, list):
+                        retry_tasks = [retry_tasks]
+                    for each_retry_task in retry_tasks:
+                        push_task(self.scheduler_downloader_queue, each_retry_task, self.loop)
                     self.counter.add_fail(task['spider_name'])
 
         else:
@@ -294,3 +309,6 @@ class BaseParser(object):
     @staticmethod
     def retry_current_task():
         raise Retry_current_task
+
+    def retry(self, task):
+        return task

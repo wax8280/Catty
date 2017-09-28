@@ -15,13 +15,17 @@ if __name__ == '__main__':
         'Catty:Downloader-Parser', loop=loop, queue_maxsize=catty.config.QUEUE['MAX_SIZE'])
     parser_scheduler_queue = AsyncRedisPriorityQueue(
         'Catty:Parser-Scheduler', loop=loop, queue_maxsize=catty.config.QUEUE['MAX_SIZE'])
+    scheduler_downloader_queue = AsyncRedisPriorityQueue(
+        'Catty:Scheduler-Downloader', loop=loop, queue_maxsize=catty.config.QUEUE['MAX_SIZE'])
 
     loop.run_until_complete(parser_scheduler_queue.conn())
     loop.run_until_complete(downloader_parser_queue.conn())
+    loop.run_until_complete(scheduler_downloader_queue.conn())
 
     parser = Parser(
         downloader_parser_queue,
         parser_scheduler_queue,
+        scheduler_downloader_queue,
         loop
     )
 

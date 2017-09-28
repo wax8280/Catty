@@ -59,12 +59,12 @@ class Task(PriorityDict):
 
 
 def get_eventloop():
-    # try:
-    #     import uvloop
-    #     return uvloop.new_event_loop()
-    # except ImportError:
-    import asyncio
-    return asyncio.get_event_loop()
+    try:
+        import uvloop
+        return uvloop.new_event_loop()
+    except ImportError:
+        import asyncio
+        return asyncio.get_event_loop()
 
 
 def dump_task(task, dump_path, dump_type, spider_name):
@@ -81,15 +81,15 @@ def dump_task(task, dump_path, dump_type, spider_name):
     else:
         conn = sqlite3.connect(path)
         cursor = conn.cursor()
-
-        cursor.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
+    cursor.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
     conn.commit()
     conn.close()
+    del conn, cursor
     return True
 
 
 def load_task(dump_path, dump_type, spider_name, delete=True):
-    """load task in sqlite"""
+    """load task in sqlite.Return a empty list if empty"""
     path = os.path.join(os.path.join(dump_path, dump_type), spider_name)
     if os.path.exists(path):
         conn = sqlite3.connect(path)
@@ -97,6 +97,8 @@ def load_task(dump_path, dump_type, spider_name, delete=True):
         cursor.execute('SELECT task_data FROM dump_task')
 
         result = [pickle.loads(i[0]) for i in cursor]
+        cursor.close()
+        del conn, cursor
         if delete:
             os.remove(path)
         return result

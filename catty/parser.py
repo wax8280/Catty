@@ -57,7 +57,7 @@ class Parser(HandlerMixin):
 
     async def load_tasks(self, which_q: str, spider_name: str):
         """load the persist task & push it to queue"""
-        tasks = load_task(catty.config.PERSISTENCE['DUMP_PATH'], '{}_{}'.format(self.name, which_q), spider_name)
+        tasks = await load_task(catty.config.PERSISTENCE['DUMP_PATH'], '{}_{}'.format(self.name, which_q), spider_name)
         if tasks:
             self.logger.log_it("[load_tasks]Load tasks:{}".format(tasks))
             for each_task in tasks:
@@ -83,7 +83,7 @@ class Parser(HandlerMixin):
                 task = await get_task(self.downloader_parser_queue)
 
         if task is not None:
-            dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], "{}_{}".format(self.name, which_q),
+            await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], "{}_{}".format(self.name, which_q),
                       task['spider_name'])
             self.logger.log_it("[dump_task]Dump task:{}".format(task))
 
@@ -247,7 +247,7 @@ class Parser(HandlerMixin):
 
                     elif task['spider_name'] in self.spider_paused:
                         # persist
-                        dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'parser', task['spider_name'])
+                        await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'parser', task['spider_name'])
                     elif task['spider_name'] in self.spider_stopped:
                         pass
                 else:
@@ -260,11 +260,11 @@ class Parser(HandlerMixin):
             self.loop.create_task(self.make_tasks())
 
     def quit(self):
-        self.logger.log_it("[Ending]Doing the last thing...")
+        self.logger.log_it("[Ending]Doing the last thing...", level='INFO')
         self.loop.create_task(self.on_end())
         while not self.ready_to_exit:
             time.sleep(1)
-        self.logger.log_it("Bye!")
+        self.logger.log_it("Bye!", level='INFO')
         os._exit(0)
 
     def run_parser(self):

@@ -8,7 +8,7 @@ import hashlib
 import pickle
 import os
 from furl import furl
-import sqlite3
+import aiosqlite
 
 md5string = lambda x: hashlib.md5(utf8(x)).hexdigest()
 
@@ -67,38 +67,32 @@ def get_eventloop():
         return asyncio.get_event_loop()
 
 
-def dump_task(task, dump_path, dump_type, spider_name):
+async def dump_task(task, dump_path, dump_type, spider_name):
     """mkdir & save task in sqlite"""
     if not os.path.exists(os.path.join(dump_path, dump_type)):
         os.mkdir(os.path.join(dump_path, dump_type))
 
     path = os.path.join(os.path.join(dump_path, dump_type), spider_name)
     if not os.path.exists(path):
-        conn = sqlite3.connect(path)
-        cursor = conn.cursor()
-        cursor.execute('CREATE TABLE dump_task (task_data VARCHAR(99999))')
-        conn.commit()
+        async with aiosqlite.connect(path) as conn:
+            await conn.execute('CREATE TABLE dump_task (task_data VARCHAR(99999))')
+            await conn.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
+            await conn.commit()
     else:
-        conn = sqlite3.connect(path)
-        cursor = conn.cursor()
-    cursor.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
-    conn.commit()
-    conn.close()
-    del conn, cursor
+        async with aiosqlite.connect(path) as conn:
+            await conn.execute('INSERT INTO dump_task (task_data) VALUES (?)', [pickle.dumps(task)])
+            await conn.commit()
     return True
 
 
-def load_task(dump_path, dump_type, spider_name, delete=True):
+async def load_task(dump_path, dump_type, spider_name, delete=True):
     """load task in sqlite.Return a empty list if empty"""
     path = os.path.join(os.path.join(dump_path, dump_type), spider_name)
     if os.path.exists(path):
-        conn = sqlite3.connect(path)
-        cursor = conn.cursor()
-        cursor.execute('SELECT task_data FROM dump_task')
+        async with aiosqlite.connect(path) as conn:
+            cursor = await conn.execute('SELECT task_data FROM dump_task')
+            result = [pickle.loads(i[0]) async for i in cursor]
 
-        result = [pickle.loads(i[0]) for i in cursor]
-        cursor.close()
-        del conn, cursor
         if delete:
             os.remove(path)
         return result

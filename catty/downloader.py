@@ -8,7 +8,7 @@ import asyncio
 import time
 import traceback
 from asyncio import BaseEventLoop
-
+from functools import partial
 import aiohttp
 
 import catty.config
@@ -89,7 +89,7 @@ class DownLoader:
 
         except Exception as e:
             self.logger.log_it("Fail to download url:{} data:{} ErrInfo:{}".format(aio_request.url, aio_request.data,
-                                                                                    traceback.format_exc()))
+                                                                                   traceback.format_exc()))
             response = Response(status=99999, body=str(e), )
 
         self.count -= 1
@@ -123,7 +123,7 @@ class DownLoader:
             # fail
             await self.fail_callback(task, aio_request)
 
-    async def start_crawler(self):
+    async def start_crawler(self, connector):
         """get item from queue and crawl it & push it to queue at last"""
         task = await get_task(self.scheduler_downloader_queue)
         if task is not None:
@@ -135,15 +135,16 @@ class DownLoader:
             while self.count > self.conn_limit:
                 await asyncio.sleep(0.5, loop=self.loop)
 
-            self.loop.create_task(self.start_crawler())
+            self.loop.create_task(self.start_crawler(connector))
         else:
             # If the queue is empty,wait and try again.
             await asyncio.sleep(catty.config.LOAD_QUEUE_INTERVAL, loop=self.loop)
-            self.loop.create_task(self.start_crawler())
+            self.loop.create_task(self.start_crawler(connector))
 
     def run(self):
         try:
-            self.loop.create_task(self.start_crawler())
+            crawler = partial(self.start_crawler,connector=aiohttp.TCPConnector(verify_ssl=False))
+            self.loop.create_task(crawler())
             self.loop.run_forever()
         except KeyboardInterrupt:
             self.logger.log_it("Bye!", level='INFO')

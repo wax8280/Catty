@@ -10,6 +10,7 @@ from functools import wraps
 from flask import render_template, Response, Flask, json, request
 
 import catty.config
+from catty import STATUS_CODE
 from catty.handler import HandlerClient
 
 app = Flask(__name__)
@@ -47,21 +48,25 @@ def upload_file():
         try:
             f = request.files['py_script']
             f.save(os.path.join(catty.config.SPIDER_PATH, f.filename))
-            client.action("update_spider", f.filename)
         except Exception as e:
-            return json.dumps({'code': -1, 'msg': str(e)})
-    return json.dumps({'code': 0, 'msg': 'Upload Success!'})
+            return json.dumps({'status_code': STATUS_CODE.UPLOAD_ERROR, 'msg': str(e)})
+
+        status_code, context = client.action("update_spider")
+        if status_code == STATUS_CODE.OK:
+            return json.dumps({'status_code': STATUS_CODE.OK})
+        else:
+            return json.dumps({'status_code': STATUS_CODE.UNKNOW_ERROR, 'msg': 'Error in `update_spider`'})
+    else:
+        return json.dumps({'status_code': STATUS_CODE.USER_ERROR, 'msg': 'Not POST method!'})
 
 
 @app.route('/action', methods=['GET'])
 @requires_auth
 def action_page():
     action_type = request.args.get('action_type', '')
-    spider_name = request.args.get('spider_name', '')
-    param = request.args.get('param', '')
+    kwagrs = {'spider_name': request.args.get('spider_name')}
     if action_type:
-        result = client.action(action_type, spider_name, param)
-    return str(result)
+        return str(client.action(action_type, **kwagrs))
 
 
 @app.route('/')

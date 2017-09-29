@@ -54,7 +54,7 @@ class Request(object):
     def dump_request(self) -> dict:
         self.dumped_request = {
             'url': self.url,
-            'method': self.method,
+            # 'method': self.method,
             'headers': self.headers,
             'allow_redirects': self.allow_redirects,
         }

@@ -13,6 +13,7 @@ import time
 import traceback
 from asyncio import BaseEventLoop
 from copy import deepcopy
+from functools import partial
 
 import catty.config
 from catty import PARSER_SCHEDULER, DOWNLOADER_PARSER
@@ -30,14 +31,16 @@ class Parser(HandlerMixin):
                  downloader_parser_queue: AsyncRedisPriorityQueue,
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
                  scheduler_downloader_queue: AsyncRedisPriorityQueue,
-                 loop: BaseEventLoop):
+                 loop: BaseEventLoop,
+                 name: str
+                 ):
         """
         :param downloader_parser_queue:The redis queue
         :param parser_scheduler_queue:The redis queue
         :param loop:EventLoop
         """
         super(Parser, self).__init__()
-        self.name = 'Parser'
+        self.name = name
 
         self.downloader_parser_queue = downloader_parser_queue
         self.parser_scheduler_queue = parser_scheduler_queue
@@ -75,19 +78,20 @@ class Parser(HandlerMixin):
         :param which_q:
         :return:
         """
-        # TODO:async dump
-        task = None
         if which_q == PARSER_SCHEDULER:
             while await self.parser_scheduler_queue.qsize():
                 task = await get_task(self.parser_scheduler_queue)
+                if task is not None:
+                    await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], "{}_{}".format(self.name, which_q),
+                                    task['spider_name'])
+                    self.logger.log_it("[dump_task]Dump task:{}".format(task))
         elif which_q == DOWNLOADER_PARSER:
             while await self.downloader_parser_queue.qsize():
                 task = await get_task(self.downloader_parser_queue)
-
-        if task is not None:
-            await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], "{}_{}".format(self.name, which_q),
-                            task['spider_name'])
-            self.logger.log_it("[dump_task]Dump task:{}".format(task))
+                if task is not None:
+                    await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], "{}_{}".format(self.name, which_q),
+                                    task['spider_name'])
+                    self.logger.log_it("[dump_task]Dump task:{}".format(task))
 
     def dump_count(self):
         counter_date = {'value_d': self.counter.value_d,
@@ -146,6 +150,10 @@ class Parser(HandlerMixin):
         """Run before begin to do something like load tasks,or load config"""
         self.load_status()
         self.load_count()
+        if self.name == 'master_parser':
+            for started_spider in self.spider_started:
+                self.loop.create_task(self.load_tasks(DOWNLOADER_PARSER, started_spider))
+                self.loop.create_task(self.load_tasks(PARSER_SCHEDULER, started_spider))
 
     async def check_end(self):
         done = []
@@ -194,14 +202,14 @@ class Parser(HandlerMixin):
         # get the spider's method from name
         method = spider_ins.__getattribute__(method_name)
 
-        return method
+        return method, spider_ins
 
     async def _run_ins_func(self, spider_name: str, method_name: str, task: dict):
         """run the spider_ins boned method to parser it & push it to parser-scheduler queue"""
         self.logger.log_it("[_run_ins_func]Parser the {}.{}".format(spider_name, method_name))
         _response = task['response']
 
-        method = self.get_spider_method(spider_name, method_name)
+        method, _ = self.get_spider_method(spider_name, method_name)
         # get the method'parms
         _signature = inspect.signature(method).parameters
 
@@ -291,7 +299,8 @@ class Parser(HandlerMixin):
     def run(self):
         try:
             self.on_begin()
-            handler_server_thread = threading.Thread(target=self.run_handler)
+            xmlrpc_partial_func = partial(self.xmlrpc_run, name=self.name)
+            handler_server_thread = threading.Thread(target=xmlrpc_partial_func)
             handler_server_thread.start()
             parser_thread = threading.Thread(target=self.run_parser)
             parser_thread.start()

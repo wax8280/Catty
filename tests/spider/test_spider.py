@@ -27,12 +27,21 @@ async def write_response(root_path, text):
 
 
 class MyParser(BaseParser):
+    def retry(self, task):
+        if task['response']['status'] != 302:
+            return task
+
     async def parser_content_page(self, response, task, loop):
         pq = PyQuery(response.body)
         urls = [a.attr.href for a in pq('a').items() if a.attr.href.startswith('http')]
         print(pq('title').text() + '\t' + str(task['meta']['deep']))
         await write_response('/mnt2/test', response.body)
         return {'urls': urls}
+
+    def return_a_list(self, response):
+        tasks = []
+        "to make some task.only return a list can be treated as task"
+        return tasks
 
 
 class Spider(BaseSpider, MyParser):

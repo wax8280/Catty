@@ -35,8 +35,8 @@ class MyParser(BaseParser):
     def parser_list_page(self, response):
         pq = PyQuery(response.body)
 
-        article_url = [article_a_tab.attr.href for article_a_tab in pq('.post .post-title a').items()]
-        next_page_url = pq('.next a').eq(0).attr.href
+        article_url = [article_a_tab.attr.href for article_a_tab in pq('.post-title a').items()]
+        next_page_url = pq('.extend next waves-effect waves-button').eq(0).attr.href
         return {'article_url': article_url, 'next_page_url': next_page_url}
 
 
@@ -45,7 +45,6 @@ class Spider(BaseSpider, MyParser):
 
     def start(self):
         callbacks = [{'parser': self.parser_list_page, 'fetcher': [self.get_list, self.get_content]}]
-
         return self.request(
             url='http://applehater.cn/',
             callback=callbacks,
@@ -59,7 +58,7 @@ class Spider(BaseSpider, MyParser):
             url=task['parser']['item']['next_page_url'],
             callback=callbacks,
             headers=default_headers,
-            meta={'dupe_filter': True}
+            meta={'dupe_filter': False}
         )
 
     def get_content(self, task):

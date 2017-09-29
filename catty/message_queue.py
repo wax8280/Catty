@@ -127,7 +127,7 @@ class AsyncRedisPriorityQueue(BaseAsyncQueue):
 
 async def get_task(q):
     """
-    Get a task from queue.
+    Get a task from queue.Return None if queue is empty.
     :param q:       Redis-Queue
     """
     try:

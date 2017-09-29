@@ -46,7 +46,7 @@ class Response(object):
     def __getitem__(self, item):
         return self.__getattribute__(item)
 
-    def dump_request(self) -> dict:
+    def dump_response(self) -> dict:
         self.dumped_request = {
             'status': self.status,
             'method': self.method,
@@ -66,7 +66,7 @@ class Response(object):
         return self.dumped_request
 
     def __str__(self):
-        return str(Response.dump_request(self))
+        return str(Response.dump_response(self))
 
     def __repr__(self):
-        return str(Response.dump_request(self))
+        return str(Response.dump_response(self))

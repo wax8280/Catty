@@ -26,7 +26,8 @@ if __name__ == '__main__':
         downloader_parser_queue,
         parser_scheduler_queue,
         scheduler_downloader_queue,
-        loop
+        loop,
+        'master_parser'
     )
 
     parser.run()

@@ -27,7 +27,7 @@ SPIDER_DEFAULT = {
 DEFAULT_HEADERS = {}
 
 # Spider脚步的路径
-SPIDER_PATH = './tests/spider'
+SPIDER_PATH = '../tests/spider'
 # 日志文件的路径
 LOG_PATH = './log'
 
@@ -42,8 +42,7 @@ INFO = 20
 DEBUG = 10
 NOTSET = 0
 """
-LOG_LEVEL = 20
-
+LOG_LEVEL = 10
 # 队列的默认配置
 QUEUE = {
     # 最大队列长度
@@ -55,13 +54,14 @@ PERSISTENCE = {
     # 是否持久化Task
     'PERSIST_BEFORE_EXIT': True,
     # 持久化文件的路径
-    'DUMP_PATH': './data/dump'
+    'DUMP_PATH': '../data/dump'
 }
 
 # Handler的端口配置
 PORT = {
-    'SCHEDULER': 38383,
-    'PARSER': 38384
+    # 必须含有 scheduler
+    'SCHEDULER': {'master_scheduler': 38383},
+    'PARSER': {'master_parser': 38384}
 }
 
 # Handler之间的进程通信的AuthKey

@@ -67,6 +67,23 @@ def get_eventloop():
         return asyncio.get_event_loop()
 
 
+def dump_pickle_data(root, name, obj):
+    p = pickle.dumps(obj)
+    if not os.path.exists(root):
+        os.mkdir(root)
+    path = os.path.join(root, name)
+    with open(path, 'wb') as f:
+        f.write(p)
+
+
+def load_pickle_data(root, name):
+    path = os.path.join(root, name)
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            t = f.read()
+            return pickle.loads(t)
+
+
 async def dump_task(task, dump_path, dump_type, spider_name):
     """mkdir & save task in sqlite"""
     if not os.path.exists(os.path.join(dump_path, dump_type)):

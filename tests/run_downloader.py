@@ -25,8 +25,6 @@ if __name__ == '__main__':
         scheduler_downloader_queue,
         downloader_parser_queue,
         loop,
-        conn_limit=DOWNLOADER['CONN_LIMIT'],
-        limit_per_host=DOWNLOADER['LIMIT_PER_HOST'],
-        force_close=DOWNLOADER['FORCE_CLOSE'])
+        conn_limit=DOWNLOADER['CONN_LIMIT'])
 
     downloader.run()

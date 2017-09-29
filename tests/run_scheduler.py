@@ -21,7 +21,8 @@ if __name__ == '__main__':
     scheduler = Scheduler(
         scheduler_downloader_queue,
         parser_scheduler_queue,
-        loop=loop
+        loop,
+        'master_scheduler'
     )
 
     scheduler.run()

@@ -4,84 +4,72 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/4/7 21:24
-import json
 import traceback
-from multiprocessing.connection import Client, Listener, Connection
 from typing import TYPE_CHECKING
 
 import catty.config
 import catty.config
 from catty.libs.log import Log
 from catty.libs.utils import *
+from catty.libs.rpc import ThreadXMLRPCServer, XMLRPCClient
+from catty import DOWNLOADER_PARSER, PARSER_SCHEDULER, SCHEDULER_DOWNLOADER, STATUS_CODE
 
 if TYPE_CHECKING:
     from catty.scheduler import Scheduler
     from catty.parser import Parser
 
 
-class HandlerClient:
-    """
-    To connect with WebUI-Server and Scheduler&Parser
-    
-    The method return a dict:
-    schema:
-    {
-        'code':int      # the status code
-        'msg':str       # (option) if error,the msg must return to tell what's wrong.
-    }
-    """
+class BaseHandleClient:
+    """ To connect with WebUI-Server and Scheduler&Parser"""
+    logger = Log('HandlerClient')
+    scheduler_handler_name = {'pause', 'start', 'run', 'stop', 'update_spider', 'delete_spider', 'list_spiders',
+                              'list_speed', 'set_speed', 'clean_request_queue', 'clean_dupe_filter'}
+    parser_handler_name = {'list_count', 'pause', 'start', 'run', 'stop', 'update_spider', 'delete_spider'}
+    scheduler_parser_handler_name = scheduler_handler_name & parser_handler_name
 
     def __init__(self):
-        self.logger = Log('HandlerClient')
+        self.scheduler_clients = {k: XMLRPCClient("http://localhost:{}".format(v))
+                                  for k, v in catty.config.PORT['SCHEDULER'].items()}
+        self.parser_clients = {k: XMLRPCClient("http://localhost:{}".format(v))
+                               for k, v in catty.config.PORT['PARSER'].items()}
 
-    def _send(self, msg: str) -> dict:
-        all_msg = {}
-        for handler_type, port in catty.config.PORT.items():
-            success = False
-            while not success:
-                try:
-                    client = Client(('localhost', port), authkey=catty.config.AUTHKEY)
-                    client.send(msg)
-                    all_msg.update({handler_type: client.recv()})
-                    success = True
-                except Exception as e:
-                    self.logger.log_it("[_send]ErrInfo:[}".format(e), 'WARN')
-                    self.logger.log_it(traceback.format_exc(), 'WARN')
-        return json.dumps(all_msg)
+    def action(self, action_type: str, **kwargs) -> list:
+        """Handle action such as 'run','start','set speed'..."""
 
-    def _send_scheduler(self, msg: str) -> dict:
-        success = False
-        port = catty.config.PORT['SCHEDULER']
-        while not success:
-            try:
-                client = Client(('localhost', port), authkey=catty.config.AUTHKEY)
-                client.send(msg)
-                return client.recv()
-            except Exception as e:
-                self.logger.log_it("[_send_scheduler]ErrInfo:[}".format(e), 'WARN')
-                self.logger.log_it(traceback.format_exc(), 'WARN')
+        context = {'type': action_type}
+        context.update(kwargs)
 
-    def _send_parser(self, msg: str) -> dict:
-        success = False
-        port = catty.config.PORT['PARSER']
-        while not success:
-            try:
-                client = Client(('localhost', port), authkey=catty.config.AUTHKEY)
-                client.send(msg)
-                return client.recv()
-            except Exception as e:
-                self.logger.log_it("[_send_parser]ErrInfo:[}".format(e), 'WARN')
-                self.logger.log_it(traceback.format_exc(), 'WARN')
+        results = []
 
+        if action_type in self.scheduler_parser_handler_name:
+            for _, each_parser_client in self.parser_clients.items():
+                results.append(getattr(each_parser_client, action_type)(context))
+            for _, each_scheduler_client in self.scheduler_clients.items():
+                results.append(getattr(each_scheduler_client, action_type)(context))
+        elif action_type in self.scheduler_handler_name:
+            for _, each_scheduler_client in self.scheduler_clients.items():
+                results.append(getattr(each_scheduler_client, action_type)(context))
+        elif action_type in self.parser_handler_name:
+            for _, each_parser_client in self.parser_clients.items():
+                results.append(getattr(each_parser_client, action_type)(context))
+        else:
+            results = [{'code': STATUS_CODE.USER_ERROR, 'msg': 'Not a vaild action type.'}]
+
+        return results
+
+
+class HandlerClient(BaseHandleClient):
     def index_list(self) -> dict:
         """Get the context which will use in index page"""
-        spiders_list = json.loads(self._send_scheduler('{"type":"list_spiders"}'))
-        spiders_count = json.loads(self._send_parser('{"type":"handle_count"}'))
-        spiders_speed = json.loads(self._send_scheduler('{"type":"list_speed"}'))
+        spider_list_status_code, spiders_list = getattr(self.scheduler_clients['master_scheduler'], 'list_spiders')({})
 
-        if spiders_list['code'] == 0 and spiders_count['code'] == 0 and spiders_speed['code'] == 0:
+        spider_count_status_code, spiders_count = getattr(self.parser_clients['master_parser'], 'list_count')({})
+        spider_speed_status_code, spiders_speed = getattr(self.scheduler_clients['master_scheduler'], 'list_speed')({})
+
+        if spider_list_status_code == STATUS_CODE.OK and spider_speed_status_code == STATUS_CODE.OK \
+                and spider_count_status_code == STATUS_CODE.OK:
             result = {
-                'code': 0,
+                'code': STATUS_CODE.OK,
                 'Started': {},
                 'Todo': {},
                 'Paused': {},
@@ -90,22 +78,21 @@ class HandlerClient:
                 'All': {},
             }
             # Re-package
-            for spider_type, spider_name_list in spiders_list['message'].items():
+            for spider_type, spider_name_list in spiders_list.items():
                 for spider_name in spider_name_list:
                     spider = result[spider_type].setdefault(spider_name, {})
                     all_spider = result['All'].setdefault(spider_name, {})
 
-                    if spider_name + '_success' in spiders_count['message']:
-                        d = {'success_count': spiders_count['message'][spider_name + '_success'],
-                             'fail_count': spiders_count['message'][spider_name + '_fail'],
+                    if spider_name + '_success' in spiders_count:
+                        d = {'success_count': spiders_count[spider_name + '_success'],
+                             'fail_count': spiders_count[spider_name + '_fail'],
                              }
                     else:
                         d = {'success_count': (0, 0, 0, 0),
-                             'fail_count': (0, 0, 0, 0),
-                             }
+                             'fail_count': (0, 0, 0, 0), }
 
-                    if spider_name in spiders_speed['message']:
-                        d.update({'speed': spiders_speed['message'][spider_name]})
+                    if spider_name in spiders_speed:
+                        d.update({'speed': spiders_speed[spider_name]})
                     else:
                         d.update({'speed': 'NULL'})
 
@@ -114,40 +101,32 @@ class HandlerClient:
                     spider.update(d)
                     all_spider.update(d)
         else:
-            result = {'code': -1, 'msg': (spiders_list, spiders_count, spiders_speed)}
-
-        return result
-
-    def action(self, action_type: str, spider_name: str, param: str = '') -> dict:
-        """Handle action such as 'run','start','set speed'..."""
-        if action_type in ['set_speed', 'clean_dupe_filter', 'clean_request_queue']:
-            result = json.loads(self._send_scheduler(json.dumps({
-                'type': action_type, 'spider_name': spider_name, 'spider_speed': param})))
-        elif action_type in ['start', 'run', 'pause', 'stop', 'update_spider', 'delete_spider']:
-            result = json.loads(self._send(json.dumps({
-                'type': action_type,
-                'spider_name': spider_name
-            })))
-        else:
-            result = {'code': 1, 'msg': 'Not a vaild action type.'}
+            return {'code': STATUS_CODE.UNKNOW_ERROR, 'msg': (spiders_list, spiders_count, spiders_speed)}
 
         return result
 
 
 class HandlerMixin:
-    """
-    A Handler to mixin Scheduler and Parser.
-
-    Code:
-        0   Normal
-        -1  Error
-        1   Warn
-    """
+    """ A Handler to mixin Scheduler and Parser. """
 
     def __init__(self):
         self._logger = Log('HandlerMixin')
+        self.scheduler_handler = {
+            'pause': self.handle_pause_spider, 'start': self.handle_start_spider, 'run': self.handle_run_spider,
+            'stop': self.handle_stop_spider, 'update_spider': self.handle_update_spider,
+            'delete_spider': self.handle_delete_spider, 'list_spiders': self.handle_list_spiders,
+            'list_speed': self.handle_list_speed, 'set_speed': self.handle_set_speed,
+            'clean_request_queue': self.handle_clean_request_queue, 'clean_dupe_filter': self.handle_clean_dupe_filter}
+        self.parser_handler = {
+            'list_count': self.handle_count, 'pause': self.handle_pause_spider, 'start': self.handle_start_spider,
+            'run': self.handle_run_spider, 'stop': self.handle_stop_spider, 'update_spider': self.handle_update_spider,
+            'delete_spider': self.handle_delete_spider}
 
-    def handle_pause_spider(self: "Scheduler", spider_name) -> tuple:
+        self.all_handler = {}
+        self.all_handler.update(self.scheduler_handler)
+        self.all_handler.update(self.parser_handler)
+
+    def handle_pause_spider(self: "Scheduler", msg) -> tuple:
         """Pause the spider"""
 
         """
@@ -156,23 +135,25 @@ class HandlerMixin:
             Paused->PASS
             Stop->PASS
         """
-        code = 0
-        msg = {}
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
         if spider_name in self.spider_started:
             set_safe_remove(self.spider_started, spider_name)
             self.spider_paused.add(spider_name)
 
-        self._logger.log_it("[pause_spider]Success pause spider spider:{}".format(spider_name))
-
         # Dump request queue
-        if self.name == 'Scheduler':
-            self.loop.create_task(self.dump_persist_task(spider_name))
+        if 'scheduler' in self.name:
+            self.loop.create_task(self.dump_tasks(spider_name))
+        elif 'parser' in self.name:
+            self.loop.create_task(self.dump_tasks(DOWNLOADER_PARSER))
+            self.loop.create_task(self.dump_tasks(PARSER_SCHEDULER))
 
-        # Dump the parser in the make_task
+        self._logger.log_it("[pause_spider]Success pause spider spider:{}".format(spider_name))
+        return STATUS_CODE.OK, {}
 
-        return code, msg
-
-    def handle_stop_spider(self: "Scheduler", spider_name) -> tuple:
+    def handle_stop_spider(self: "Scheduler", msg) -> tuple:
         """Stop the spider"""
 
         """
@@ -181,8 +162,10 @@ class HandlerMixin:
             Paused->-spider_paused & _spider_stopped
             Stopped->PASS
         """
-        code = 0
-        msg = {}
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
         if spider_name in self.spider_started:
             set_safe_remove(self.spider_started, spider_name)
             self.spider_stopped.add(spider_name)
@@ -191,9 +174,9 @@ class HandlerMixin:
             self.spider_stopped.add(spider_name)
 
         self._logger.log_it("[stop_spider]Success pause spider spider:{}".format(spider_name))
-        return code, msg
+        return STATUS_CODE.OK, {}
 
-    def handle_run_spider(self: "Scheduler", spider_name):
+    def handle_run_spider(self: "Scheduler", msg):
         """continue if spider was paused or start from begin if spider was stopped"""
 
         """
@@ -207,31 +190,36 @@ class HandlerMixin:
             PAUSED->+spider_started
             STOPPED->+spider_started
         """
-        code = 0
-        msg = {}
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
         if spider_name in self.spider_paused:
             set_safe_remove(self.spider_paused, spider_name)
             self.spider_started.add(spider_name)
         elif spider_name in self.spider_stopped:
             set_safe_remove(self.spider_stopped, spider_name)
-            if self.name == 'Scheduler':
+            if 'scheduler' in self.name:
                 self.spider_ready_start.add(spider_name)
             else:
                 self.spider_started.add(spider_name)
-        elif self.name == 'Scheduler' and spider_name in self.spider_todo:
+        elif 'scheduler' in self.name and spider_name in self.spider_todo:
             set_safe_remove(self.spider_todo, spider_name)
             self.spider_started.add(spider_name)
-        elif self.name == 'Parser':
+        elif 'parser' in self.name:
             self.spider_started.add(spider_name)
 
+        # load the persist file
+        if 'scheduler' in self.name:
+            self.loop.create_task(self.load_tasks(SCHEDULER_DOWNLOADER, spider_name))
+        else:
+            self.loop.create_task(self.load_tasks(PARSER_SCHEDULER, spider_name))
+            self.loop.create_task(self.load_tasks(DOWNLOADER_PARSER, spider_name))
         self._logger.log_it("[run_spider]Success spider:{}".format(spider_name))
 
-        # load the persist file
-        self.loop.create_task(self.load_persist_task(spider_name))
+        return STATUS_CODE.OK, {}
 
-        return code, msg
-
-    def handle_start_spider(self: "Scheduler", spider_name):
+    def handle_start_spider(self: "Scheduler", msg):
         """start from begin if spider is todo,start from begin & contionue is spider was paused or stopped"""
         """
         Scheduler:
@@ -244,34 +232,37 @@ class HandlerMixin:
             PAUSED->+spider_started
             STOPPED->+spider_started
         """
-        code = 0
-        msg = {}
-        if self.name == 'Scheduler' and spider_name in self.spider_todo:
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
+        if 'scheduler' in self.name and spider_name in self.spider_todo:
             set_safe_remove(self.spider_todo, spider_name)
             self.spider_ready_start.add(spider_name)
         elif spider_name in self.spider_paused:
             set_safe_remove(self.spider_paused, spider_name)
             self.spider_started.add(spider_name)
-            if self.name == 'Scheduler':
+            if 'scheduler' in self.name:
                 self.spider_ready_start.add(spider_name)
         elif spider_name in self.spider_stopped:
             set_safe_remove(self.spider_stopped, spider_name)
             self.spider_started.add(spider_name)
-            if self.name == 'Scheduler':
+            if 'scheduler' in self.name:
                 self.spider_ready_start.add(spider_name)
         elif spider_name in self.spider_started:
-            if self.name == 'Scheduler':
+            if 'scheduler' in self.name:
                 self.spider_ready_start.add(spider_name)
-        elif self.name == 'Parser':
+        elif 'parser' in self.name:
             self.spider_started.add(spider_name)
-        # TODO:delete the dump files
+        print(spider_name)
         self._logger.log_it("[start_spider]Success spider:{}".format(spider_name))
-        return code, msg
+        print(self.spider_started, self.spider_paused, self.spider_stopped)
+        return STATUS_CODE.OK, {}
 
-    # --------------------------------------------------------------------
+    # ------------------------SCHEDULER_ONLY----------------------------------
 
-    def handle_list_spiders(self: "Scheduler") -> tuple:
-        return 0, {
+    def handle_list_spiders(self: "Scheduler", msg) -> tuple:
+        return STATUS_CODE.OK, {
             'Started': list(get_default(self, 'spider_started')) if get_default(self, 'spider_started') else [],
             'Todo': list(get_default(self, 'spider_todo')) if get_default(self, 'spider_todo') else [],
             'Paused': list(get_default(self, 'spider_paused')) if get_default(self, 'spider_paused') else [],
@@ -280,130 +271,83 @@ class HandlerMixin:
                                                                                         'spider_ready_start') else []
         }
 
-    def handle_list_speed(self: "Scheduler") -> tuple:
-        return 0, self.selector.spider_speed
+    def handle_list_speed(self: "Scheduler", msg) -> tuple:
+        return STATUS_CODE.OK, self.selector.spider_speed
 
-    def handle_count(self: "Parser") -> tuple:
-        print(self.counter.cache_value)
-        return 0, self.counter.count_all()
+    def handle_set_speed(self: "Scheduler", msg) -> tuple:
+        spider_name = msg.get('spider_name')
+        speed = msg['spider_speed']
+        if 'scheduler' in self.name:
+            self.selector.update_speed(spider_name, int(speed))
+        return STATUS_CODE.OK, {}
+
+    def handle_clean_request_queue(self: "Scheduler", msg) -> tuple:
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
+        self.loop.create_task(self.clean_requests_queue(spider_name))
+        return STATUS_CODE.OK, {}
+
+    def handle_clean_dupe_filter(self: "Scheduler", msg) -> tuple:
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
+        self.loop.create_task(self.clean_dupefilter(spider_name))
+        return STATUS_CODE.OK, {}
 
     # ---------------------------------------------------------------------
-    def handle_set_speed(self: "Scheduler", spider_name: str, speed: int) -> tuple:
-        if self.name == 'Scheduler':
-            try:
-                self.selector.update_speed(spider_name, int(speed))
-            except Exception:
-                return -1, {'msg': traceback.format_exc()}
+
+    def handle_update_spider(self: "Scheduler", msg) -> tuple:
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
+
+        self.spider_module_handle.update_spider(spider_name)
+        # only can upload .py files
+        if '.py' in spider_name:
+            self.spider_todo.add(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name)
+            self.selector.update_speed(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name, 1)
         return 0, {}
 
-    def handle_clean_request_queue(self: "Scheduler", spider_name: str) -> tuple:
-        self.loop.create_task(self.clean_queue(spider_name))
-        return 0, {}
+    def handle_delete_spider(self: "Scheduler", msg) -> tuple:
+        spider_name = msg.get('spider_name')
+        if not spider_name:
+            return STATUS_CODE.ARGS_ERROR, {}
 
-    def handle_clean_dupe_filter(self: "Scheduler", spider_name: str) -> tuple:
-        self.loop.create_task(self.clean_dupefilter(spider_name))
-        return 0, {}
+        if spider_name in self.spider_started or ('scheduler' in self.name and spider_name in self.spider_ready_start):
+            return STATUS_CODE.USER_ERROR, {'msg': "Please stop the spider first."}
 
-    def handle_update_spider(self: "Scheduler", spider_name: str) -> tuple:
-        try:
-            self.spider_module_handle.update_spider(spider_name)
-            if '.py' in spider_name:
-                self.spider_todo.add(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name)
-                self.selector.update_speed(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name,
-                                           1)
-        except Exception:
-            return -1, {'msg': traceback.format_exc()}
-        return 0, {}
+        if 'scheduler' in self.name:
+            self.handle_clean_request_queue(spider_name)
+            self.handle_clean_dupe_filter(spider_name)
 
-    def handle_delete_spider(self: "Scheduler", spider_name: str) -> tuple:
-        if spider_name in self.spider_started or (self.name == 'Scheduler' and spider_name in self.spider_ready_start):
-            return -1, {'msg': "Please stop the spider first."}
-        try:
-            if self.name == 'Scheduler':
-                self.handle_clean_request_queue(spider_name)
-                self.handle_clean_dupe_filter(spider_name)
-                set_safe_remove(self.spider_todo, spider_name)
-
-            set_safe_remove(self.spider_stopped, spider_name)
-            set_safe_remove(self.spider_paused, spider_name)
-            self.spider_module_handle.delete_spider(spider_name)
-        except Exception:
-            return -1, {'msg': traceback.format_exc()}
+        self.spider_module_handle.delete_spider(spider_name)
 
         for spider_set in self.all_spider_set:
             if spider_name in spider_set:
                 spider_set.remove(spider_name)
 
-        self.loop.create_task(self.clean_queue(spider_name))
+        self.loop.create_task(self.clean_requests_queue(spider_name))
         self.loop.create_task(self.clean_dupefilter(spider_name))
-        try:
-            self.bloom_filter.pop(spider_name)
-        except KeyError:
-            pass
+        return STATUS_CODE.OK, {}
 
-        return 0, {}
+    # -------------------------PARSER ONLY---------------------------------
+
+    def handle_count(self: "Parser", msg) -> tuple:
+        return STATUS_CODE.OK, self.counter.count_all()
 
     # ---------------------------------------------------------------------
 
-    def handle(self: "Scheduler", conn: Connection):
-        try:
-            while True:
-                msg = json.loads(conn.recv())
-                try:
-                    r = -1, {}
-                    if msg['type'] == 'pause':
-                        r = self.handle_pause_spider(msg['spider_name'])
-                    elif msg['type'] == 'start':
-                        r = self.handle_start_spider(msg['spider_name'])
-                    elif msg['type'] == 'run':
-                        r = self.handle_run_spider(msg['spider_name'])
-                    elif msg['type'] == 'stop':
-                        r = self.handle_stop_spider(msg['spider_name'])
-
-                    elif msg['type'] == 'update_spider':
-                        r = self.handle_update_spider(msg['spider_name'])
-                    elif msg['type'] == 'delete_spider':
-                        r = self.handle_delete_spider(msg['spider_name'])
-
-                    if self.name == 'Scheduler':
-                        if msg['type'] == 'list_spiders':
-                            r = self.handle_list_spiders()
-                        elif msg['type'] == 'list_speed':
-                            r = self.handle_list_speed()
-                        elif msg['type'] == 'set_speed':
-                            r = self.handle_set_speed(msg['spider_name'], msg['spider_speed'])
-                        elif msg['type'] == 'clean_request_queue':
-                            r = self.handle_clean_request_queue(msg['spider_name'])
-                        elif msg['type'] == 'clean_dupe_filter':
-                            r = self.handle_clean_dupe_filter(msg['spider_name'])
-
-                    if self.name == 'Parser':
-                        if msg['type'] == 'handle_count':
-                            r = self.handle_count()
-
-                    send_msg = json.dumps({"code": r[0], "message": r[1]})
-                except Exception:
-                    send_msg = json.dumps({"code": -1, "msg": traceback.format_exc()})
-
-                conn.send(send_msg)
-        except EOFError:
-            pass
-
-    def echo_server(self, address: tuple, authkey: str):
-        serv = Listener(address, authkey=authkey)
-        while True:
-            try:
-                client = serv.accept()
-                self.handle(client)
-            except Exception:
-                pass
-
-    def run_handler(self: "Scheduler"):
-        if self.name == 'Scheduler':
-            self.echo_server(
-                ('', catty.config.PORT['SCHEDULER']),
-                authkey=catty.config.AUTHKEY)
+    def xmlrpc_run(self, name):
+        if 'scheduler' in self.name:
+            application = ThreadXMLRPCServer(('localhost', catty.config.PORT['SCHEDULER'][name]))
+            for k, v in self.scheduler_handler.items():
+                application.register_function(v, k)
         else:
-            self.echo_server(
-                ('', catty.config.PORT['PARSER']),
-                authkey=catty.config.AUTHKEY)
+            application = ThreadXMLRPCServer(('localhost', catty.config.PORT['PARSER'][name]))
+            for k, v in self.parser_handler.items():
+                application.register_function(v, k)
+
+        application.serve_forever()

@@ -20,7 +20,10 @@ SPIDER_DEFAULT = {
     # BloomFilter的默认种子
     'SEEDS': ["HELLO", "WORLD", "CATTY", "PYTHON", "APPLE", "THIS", "THAT", "MY", "HI", "NOT"],
     # BloomFilter的分块
-    'BLOCKNUM': 1
+    'BLOCKNUM': 1,
+    'DUPE_FILTER': False,
+    'RETRY': 0,
+    'RETRY_WAIT': 3
 }
 
 # 默认的HTTP请求头部

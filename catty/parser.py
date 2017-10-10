@@ -7,7 +7,6 @@
 import asyncio
 import inspect
 import os
-import pickle
 import threading
 import time
 import traceback
@@ -23,7 +22,7 @@ from catty.exception import Retry_current_task
 from catty.libs.count import Counter
 from catty.libs.handle_module import SpiderModuleHandle
 from catty.libs.log import Log
-from catty.libs.utils import dump_task, load_task
+from catty.libs.utils import dump_task, load_task, dump_pickle_data, load_pickle_data
 
 
 class Parser(HandlerMixin):
@@ -32,8 +31,7 @@ class Parser(HandlerMixin):
                  parser_scheduler_queue: AsyncRedisPriorityQueue,
                  scheduler_downloader_queue: AsyncRedisPriorityQueue,
                  loop: BaseEventLoop,
-                 name: str
-                 ):
+                 name: str):
         """
         :param downloader_parser_queue:The redis queue
         :param parser_scheduler_queue:The redis queue
@@ -60,7 +58,7 @@ class Parser(HandlerMixin):
         self.ready_to_exit = False
         self.counter = Counter(loop)
 
-    async def load_tasks(self, which_q: str, spider_name: str):
+    async def load_tasks(self, spider_name: str, which_q: str = ''):
         """load the persist task & push it to queue"""
         tasks = await load_task(catty.config.PERSISTENCE['DUMP_PATH'], '{}_{}'.format(self.name, which_q), spider_name)
         if tasks:
@@ -73,11 +71,7 @@ class Parser(HandlerMixin):
                     await push_task(self.downloader_parser_queue, each_task, self.loop)
 
     async def dump_tasks(self, which_q: str):
-        """
-        dump the task which in queue
-        :param which_q:
-        :return:
-        """
+        """ dump the task which in queue """
         if which_q == PARSER_SCHEDULER:
             while await self.parser_scheduler_queue.qsize():
                 task = await get_task(self.parser_scheduler_queue)
@@ -94,28 +88,17 @@ class Parser(HandlerMixin):
                     self.logger.log_it("[dump_task]Dump task:{}".format(task))
 
     def dump_count(self):
-        counter_date = {'value_d': self.counter.value_d,
-                        'cache_value': self.counter.cache_value}
-        p = pickle.dumps(counter_date)
+        counter_date = {'value_d': self.counter.value_d, 'cache_value': self.counter.cache_value}
         root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser')
-        if not os.path.exists(root):
-            os.mkdir(root)
-        path = os.path.join(root, 'counter')
-        with open(path, 'wb') as f:
-            f.write(p)
+        dump_pickle_data(root, '{}_counter'.format(self.name), counter_date)
         self.logger.log_it("[dump_count]{}".format(counter_date))
-        return True
 
     def load_count(self):
-        path = os.path.join(os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser'), 'counter')
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                t = f.read()
-
-            counter_date = pickle.loads(t)
-            self.counter.value_d = counter_date['value_d']
-            self.counter.cache_value = counter_date['cache_value']
-            self.logger.log_it("[load_count]{}".format(counter_date))
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser')
+        counter_date = load_pickle_data(root, '{}_counter'.format(self.name))
+        self.counter.value_d = counter_date['value_d']
+        self.counter.cache_value = counter_date['cache_value']
+        self.logger.log_it("[load_count]{}".format(counter_date))
 
     def dump_status(self):
         status = {
@@ -123,37 +106,27 @@ class Parser(HandlerMixin):
             'spider_paused': self.spider_paused,
             'spider_stopped': self.spider_stopped
         }
-        p = pickle.dumps(status)
         root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser')
-        if not os.path.exists(root):
-            os.mkdir(root)
-        path = os.path.join(root, 'status')
-        with open(path, 'wb') as f:
-            f.write(p)
+        dump_pickle_data(root, '{}_status'.format(self.name), status)
         self.logger.log_it("[dump_status]{}".format(status))
-        return True
 
     def load_status(self):
-        path = os.path.join(os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser'), 'status')
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                t = f.read()
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'parser')
 
-            status = pickle.loads(t)
-            self.spider_paused = status['spider_paused']
-            self.spider_stopped = status['spider_stopped']
-            self.spider_started = status['spider_started']
-            self.all_spider_set = [self.spider_started, self.spider_stopped, self.spider_paused]
-            self.logger.log_it("[load_status]{}".format(status))
+        status = load_pickle_data(root, '{}_status'.format(self.name))
+        self.spider_paused = status['spider_paused']
+        self.spider_stopped = status['spider_stopped']
+        self.spider_started = status['spider_started']
+        self.all_spider_set = [self.spider_started, self.spider_stopped, self.spider_paused]
+        self.logger.log_it("[load_status]{}".format(status))
 
     def on_begin(self):
         """Run before begin to do something like load tasks,or load config"""
         self.load_status()
         self.load_count()
-        if self.name == 'master_parser':
-            for started_spider in self.spider_started:
-                self.loop.create_task(self.load_tasks(DOWNLOADER_PARSER, started_spider))
-                self.loop.create_task(self.load_tasks(PARSER_SCHEDULER, started_spider))
+        for started_spider in self.spider_started:
+            self.loop.create_task(self.load_tasks(DOWNLOADER_PARSER, started_spider))
+            self.loop.create_task(self.load_tasks(PARSER_SCHEDULER, started_spider))
 
     async def check_end(self):
         done = []
@@ -235,9 +208,13 @@ class Parser(HandlerMixin):
             return
 
         if isinstance(parser_return, dict):
-            task['parser'].update({'item': parser_return})
+            # normal
+            if 'tid' not in parser_return:
+                # not a task
+                task['parser'].update({'item': parser_return})
             await push_task(self.parser_scheduler_queue, task, self.loop)
         elif isinstance(parser_return, list):
+            # task_list
             for each_return_task in parser_return:
                 await push_task(self.scheduler_downloader_queue, each_return_task, self.loop)
         elif parser_return is None:
@@ -249,7 +226,8 @@ class Parser(HandlerMixin):
         if task:
             self.loop.create_task(self.make_tasks())
             if 'status' in task['response']:
-                if 200 <= task['response']['status'] < 400:
+                if 200 <= task['response']['status'] < 400 and \
+                                task['response']['status'] in task['handle_status_code']:
                     self.counter.add_success(task['spider_name'])
                     if task['spider_name'] in self.spider_started:
                         callback = task['callback']
@@ -268,19 +246,24 @@ class Parser(HandlerMixin):
                     elif task['spider_name'] in self.spider_stopped:
                         pass
                 else:
-                    retry_method = self.get_spider_method(task['spider_name'], 'retry')
-                    # it could be return a list
-                    retry_tasks = retry_method(task)
-                    if not isinstance(retry_tasks, list):
-                        retry_tasks = [retry_tasks]
-                    for each_retry_task in retry_tasks:
-                        push_task(self.scheduler_downloader_queue, each_retry_task, self.loop)
+                    retry = task['meta']['retry']
+                    retried = task.get('retried', 0)
+                    if retry != 0 and retried < retry:
+                        task.update({'retried': retried + 1})
+                        retry_method, _ = self.get_spider_method(task['spider_name'], 'retry')
+
+                        # it could be return a list
+                        retry_tasks = retry_method(task)
+                        if not isinstance(retry_tasks, list):
+                            retry_tasks = [retry_tasks]
+                        for each_retry_task in retry_tasks:
+                            await asyncio.sleep(task['meta']['retry_wait'], self.loop)
+                            await push_task(self.scheduler_downloader_queue, each_retry_task, self.loop)
                     self.counter.add_fail(task['spider_name'])
 
         else:
-            await asyncio.sleep(catty.config.LOAD_QUEUE_INTERVAL, loop=self.loop)
-
-            self.loop.create_task(self.make_tasks())
+            # if no task in downloader_parser queue,wait it
+            self.loop.call_later(catty.config.LOAD_QUEUE_INTERVAL, lambda: self.loop.create_task(self.make_tasks()))
 
     def quit(self):
         self.logger.log_it("[Ending]Doing the last thing...", level='INFO')
@@ -301,9 +284,9 @@ class Parser(HandlerMixin):
             self.on_begin()
             xmlrpc_partial_func = partial(self.xmlrpc_run, name=self.name)
             handler_server_thread = threading.Thread(target=xmlrpc_partial_func)
-            handler_server_thread.start()
             parser_thread = threading.Thread(target=self.run_parser)
             parser_thread.start()
+            handler_server_thread.start()
 
             # In Windows,I cant catch KeyboardInterrupt.FXXK!
             while True:

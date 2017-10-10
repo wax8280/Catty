@@ -4,7 +4,6 @@
 # Author: Vincent<vincent8280@outlook.com>
 #         http://blog.vincentzhong.cn
 # Created on 2017/4/7 21:24
-import traceback
 from typing import TYPE_CHECKING
 
 import catty.config
@@ -12,7 +11,7 @@ import catty.config
 from catty.libs.log import Log
 from catty.libs.utils import *
 from catty.libs.rpc import ThreadXMLRPCServer, XMLRPCClient
-from catty import DOWNLOADER_PARSER, PARSER_SCHEDULER, SCHEDULER_DOWNLOADER, STATUS_CODE
+from catty import DOWNLOADER_PARSER, PARSER_SCHEDULER, STATUS_CODE
 
 if TYPE_CHECKING:
     from catty.scheduler import Scheduler
@@ -211,10 +210,10 @@ class HandlerMixin:
 
         # load the persist file
         if 'scheduler' in self.name:
-            self.loop.create_task(self.load_tasks(SCHEDULER_DOWNLOADER, spider_name))
+            self.loop.create_task(self.load_tasks(spider_name))
         else:
-            self.loop.create_task(self.load_tasks(PARSER_SCHEDULER, spider_name))
-            self.loop.create_task(self.load_tasks(DOWNLOADER_PARSER, spider_name))
+            self.loop.create_task(self.load_tasks(spider_name, PARSER_SCHEDULER))
+            self.loop.create_task(self.load_tasks(spider_name, DOWNLOADER_PARSER))
         self._logger.log_it("[run_spider]Success spider:{}".format(spider_name))
 
         return STATUS_CODE.OK, {}
@@ -254,9 +253,7 @@ class HandlerMixin:
                 self.spider_ready_start.add(spider_name)
         elif 'parser' in self.name:
             self.spider_started.add(spider_name)
-        print(spider_name)
         self._logger.log_it("[start_spider]Success spider:{}".format(spider_name))
-        print(self.spider_started, self.spider_paused, self.spider_stopped)
         return STATUS_CODE.OK, {}
 
     # ------------------------SCHEDULER_ONLY----------------------------------
@@ -286,16 +283,22 @@ class HandlerMixin:
         if not spider_name:
             return STATUS_CODE.ARGS_ERROR, {}
 
-        self.loop.create_task(self.clean_requests_queue(spider_name))
-        return STATUS_CODE.OK, {}
+        if self.name == 'master_scheduler':
+            self.loop.create_task(self.clean_requests_queue(spider_name))
+            return STATUS_CODE.OK, {}
+        else:
+            return STATUS_CODE.NOT_MY_BUSINESS, {}
 
     def handle_clean_dupe_filter(self: "Scheduler", msg) -> tuple:
         spider_name = msg.get('spider_name')
         if not spider_name:
             return STATUS_CODE.ARGS_ERROR, {}
 
-        self.loop.create_task(self.clean_dupefilter(spider_name))
-        return STATUS_CODE.OK, {}
+        if self.name == 'master_parser':
+            self.loop.create_task(self.clean_dupefilter(spider_name))
+            return STATUS_CODE.OK, {}
+        else:
+            return STATUS_CODE.NOT_MY_BUSINESS, {}
 
     # ---------------------------------------------------------------------
 
@@ -309,7 +312,7 @@ class HandlerMixin:
         if '.py' in spider_name:
             self.spider_todo.add(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name)
             self.selector.update_speed(getattr(self.spider_module_handle.namespace[spider_name][1], 'Spider').name, 1)
-        return 0, {}
+        return STATUS_CODE.OK, {}
 
     def handle_delete_spider(self: "Scheduler", msg) -> tuple:
         spider_name = msg.get('spider_name')
@@ -340,7 +343,7 @@ class HandlerMixin:
 
     # ---------------------------------------------------------------------
 
-    def xmlrpc_run(self, name):
+    def xmlrpc_run(self: "Scheduler", name):
         if 'scheduler' in self.name:
             application = ThreadXMLRPCServer(('localhost', catty.config.PORT['SCHEDULER'][name]))
             for k, v in self.scheduler_handler.items():

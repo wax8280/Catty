@@ -51,7 +51,7 @@ class PriorityDict(dict):
         return self['priority'] == other['priority']
 
     def __lt__(self, other):
-        return self['priority'] < other['priority']
+        return self['priority'] > other['priority']
 
 
 class Task(PriorityDict):

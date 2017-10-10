@@ -15,6 +15,7 @@ class BaseSpider(metaclass=abc.ABCMeta):
     speed = catty.config.SPIDER_DEFAULT['SPEED']
     seeds = catty.config.SPIDER_DEFAULT['SEEDS']
     blocknum = catty.config.SPIDER_DEFAULT['BLOCKNUM']
+    handle_status_code = catty.config.SPIDER_DEFAULT('HANDLE_STATUS_CODE', [])
 
     @abc.abstractmethod
     def start(self):
@@ -38,9 +39,10 @@ class BaseSpider(metaclass=abc.ABCMeta):
 
         meta = kwargs.get('meta', {})
 
-        meta.setdefault('retry', 0)
-        meta.setdefault('retry_wait', 3)
-        meta.setdefault('dupe_filter', False)
+        meta.setdefault('retry', catty.config.SPIDER_DEFAULT.get('RETRY', 0))
+        meta.setdefault('retry_wait', catty.config.SPIDER_DEFAULT.get('RETRY_WAIT', 3))
+        meta.setdefault('dupe_filter', catty.config.SPIDER_DEFAULT.get('DUPE_FILTER', False))
+        meta.setdefault('handle_status_code', self.handle_status_code)
 
         return Tasker.make_task({
             'spider_name': self.name,

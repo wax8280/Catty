@@ -27,9 +27,16 @@ async def write_response(root_path, text):
 
 
 class MyParser(BaseParser):
+    # you can handle the response when it is not normal
+    handle_status_code = [502]
+
     def retry(self, task):
         if task['response']['status'] != 302:
             return task
+        """
+        You also can return a list
+        return tasks_list
+        """
 
     async def parser_content_page(self, response, task, loop):
         pq = PyQuery(response.body)

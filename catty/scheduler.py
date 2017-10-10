@@ -13,7 +13,7 @@ import traceback
 from functools import partial
 
 import catty.config
-from catty import PARSER_SCHEDULER, DOWNLOADER_PARSER, SCHEDULER_DOWNLOADER
+from catty import SCHEDULER_DOWNLOADER
 from catty.message_queue import AsyncRedisPriorityQueue, get_task, push_task
 from catty.handler import HandlerMixin
 from catty.libs.bloom_filter import RedisBloomFilter
@@ -96,15 +96,15 @@ class Scheduler(HandlerMixin):
             self.spider_todo,
             self.loop)
 
-    async def load_tasks(self, which_q: str, spider_name: str):
+    async def load_tasks(self, spider_name: str, which_q: str = ''):
         """load the persist task & push it to queue"""
-        tasks = await load_task(catty.config.PERSISTENCE['DUMP_PATH'], 'request_queue', spider_name)
+        tasks = await load_task(catty.config.PERSISTENCE['DUMP_PATH'], 'request_queue_{}'.format(self.name),
+                                spider_name)
         if tasks:
             self.logger.log_it("[load_tasks]Load tasks:{}".format(tasks))
             for each_task in tasks:
                 # push each task to request-queue
-                if which_q == SCHEDULER_DOWNLOADER:
-                    await push_task(self.scheduler_downloader_queue, each_task, self.loop)
+                await push_task(self.scheduler_downloader_queue, each_task, self.loop)
 
     async def dump_tasks(self, spider_name: str):
         """ dump the task which in queue """
@@ -119,8 +119,53 @@ class Scheduler(HandlerMixin):
         while await request_q.qsize():
             task = await get_task(request_q)
             if task is not None:
-                await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'], 'request_queue', task['spider_name'])
+                await dump_task(task, catty.config.PERSISTENCE['DUMP_PATH'],
+                                'request_queue_{}'.format(self.name), task['spider_name'])
                 self.logger.log_it("[dump_task]Dump task:{}".format(task))
+
+    async def dump_all_paused_task(self):
+        """Dump the task which spider was paused."""
+        for paused_spider_name in self.spider_paused:
+            await self.dump_tasks(paused_spider_name)
+
+    def dump_speed(self):
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
+        dump_pickle_data(root, 'speed_{}'.format(self.name), self.selector.spider_speed)
+        self.logger.log_it("[dump_speed]{}".format(self.selector.spider_speed))
+
+    def load_speed(self):
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
+        spider_speed = load_pickle_data(root, 'speed{}'.format(self.name))
+        self.selector.spider_speed = spider_speed
+        self.selector.init_speed()
+        self.logger.log_it("[load_speed]{}".format(spider_speed))
+
+    def dump_status(self):
+        status = {
+            'spider_started': self.spider_started,
+            'spider_paused': self.spider_paused,
+            'spider_stopped': self.spider_stopped,
+            'spider_todo': self.spider_todo,
+            'spider_ready_start': self.spider_ready_start,
+        }
+
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
+        dump_pickle_data(root, 'status_{}'.format(self.name), status)
+        self.logger.log_it("[dump_status]{}".format(status))
+
+    def load_status(self):
+        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
+
+        status = load_pickle_data(root, 'status{}'.format(self.name))
+        self.spider_paused = status['spider_paused']
+        self.spider_stopped = status['spider_stopped']
+        self.spider_started = status['spider_started']
+        self.spider_todo = status['spider_todo']
+        self.spider_ready_start = status['spider_ready_start']
+        self.all_spider_set = [
+            self.spider_todo, self.spider_paused, self.spider_started, self.spider_ready_start, self.spider_started
+        ]
+        self.logger.log_it("[load_status]{}".format(status))
 
     async def clean_requests_queue(self, spider_name: str):
         """Clean the spider's requests queue"""
@@ -152,57 +197,12 @@ class Scheduler(HandlerMixin):
             self.logger.log_it('[clean_dupefilter]Cant find bloomfilter.Spidername:{}'.format(spider_name))
         self.logger.log_it('[clean_dupefilter]Clean bloomfilter:{}'.format(spider_name))
 
-    async def dump_all_paused_task(self):
-        """Dump the task which spider was paused."""
-        for paused_spider_name in self.spider_paused:
-            await self.dump_tasks(paused_spider_name)
-
-    def dump_speed(self):
-        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
-        dump_pickle_data(root, 'speed', self.selector.spider_speed)
-        self.logger.log_it("[dump_speed]{}".format(self.selector.spider_speed))
-
-    def load_speed(self):
-        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
-        spider_speed = load_pickle_data(root, 'speed')
-        self.selector.spider_speed = spider_speed
-        self.selector.init_speed()
-        self.logger.log_it("[load_speed]{}".format(spider_speed))
-
-    def dump_status(self):
-        status = {
-            'spider_started': self.spider_started,
-            'spider_paused': self.spider_paused,
-            'spider_stopped': self.spider_stopped,
-            'spider_todo': self.spider_todo,
-            'spider_ready_start': self.spider_ready_start,
-        }
-
-        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
-        dump_pickle_data(root, 'status', status)
-        self.logger.log_it("[dump_status]{}".format(status))
-
-    def load_status(self):
-        root = os.path.join(catty.config.PERSISTENCE['DUMP_PATH'], 'scheduler')
-
-        status = load_pickle_data(root, 'status')
-        self.spider_paused = status['spider_paused']
-        self.spider_stopped = status['spider_stopped']
-        self.spider_started = status['spider_started']
-        self.spider_todo = status['spider_todo']
-        self.spider_ready_start = status['spider_ready_start']
-        self.all_spider_set = [
-            self.spider_todo, self.spider_paused, self.spider_started, self.spider_ready_start, self.spider_started
-        ]
-        self.logger.log_it("[load_status]{}".format(status))
-
     def on_begin(self):
         """Run before begin to do something like load tasks,or load config"""
         self.load_status()
-        if self.name == 'master_scheduler':
-            for started_spider in self.spider_started:
-                # load every started_spider's requests
-                self.loop.create_task(self.load_tasks(SCHEDULER_DOWNLOADER, started_spider))
+        for started_spider in self.spider_started:
+            # load every started_spider's requests
+            self.loop.create_task(self.load_tasks(SCHEDULER_DOWNLOADER, started_spider))
         self.instantiate_spider()
         self.init_spider_set()
         self.instantiate_selector()
@@ -369,8 +369,7 @@ class Scheduler(HandlerMixin):
             elif task['spider_name'] in self.spider_todo:
                 pass
         else:
-            await asyncio.sleep(catty.config.LOAD_QUEUE_INTERVAL, loop=self.loop)
-            self.loop.create_task(self.make_tasks())
+            self.loop.call_later(catty.config.LOAD_QUEUE_INTERVAL, lambda: self.loop.create_task(self.make_tasks()))
 
     def quit(self):
         self.logger.log_it("[Ending]Doing the last thing...")

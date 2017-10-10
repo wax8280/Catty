@@ -7,6 +7,20 @@ Catty是一个以Python3标准库[asyncio](https://www.python.org/dev/peps/pep-3
 - 具有WebUI的爬虫管理功能
 
 
+# TODO LIST
+
+* ~~前端由UIKit改为Bootstrap~~
+* Aiohttp的Cookies管理
+* ~~async dump tasks~~
+* ~~dump downloader-parser queue~~
+* ~accept the task in return~
+* ~~parser定义的重试~~
+* 一开始就创建文件夹
+* ~~多线程RPC服务~~
+* 多开
+* ~~对于多开，持久化策略也需要改变~~
+* 自定义重试状态码
+
 
 ## Catty安装
 
@@ -108,6 +122,16 @@ import aiofiles
 
 
 class MyParser(BaseParser):
+    
+    handle_status_code = []
+    def retry(self, task):
+        if task['response']['status'] == 302:
+            return task
+        """
+        You also can return a list
+        return tasks_list
+        """
+    
     def parser_index_page(self, response):
         pq = PyQuery(response.body)
 
@@ -134,8 +158,7 @@ class Spider(BaseSpider, MyParser):
                 url=each_url,
                 callback=callback
             )
-            for each_url in task['parser']['item']['detail_url']
-            ]
+            for each_url in task['parser']['item']['detail_url']]
 ```
 
 每个爬虫脚本需包含两个类
@@ -193,6 +216,7 @@ class Spider(BaseSpider, MyParser):
   - retry(int)：最大重试次数。默认为0，不重试
   - retry_wait(int)：重试的时间间隔，0为立刻重试。默认为3
   - dupe_filter(int)：是否使用去重
+  - handle_status_code(list)：可选，默认不处理（或重试）小于200，大于400的状态码。你也可以手动处理他们。
 
 - params(dict/bytes)：可选，追加到URL后面的的URL参数
 
@@ -212,15 +236,10 @@ class Spider(BaseSpider, MyParser):
 
 
 - data(dict/bytes)：可选，Request里body的数据
-
 - headers(dict)：可选，请求的头部
-
 - allow_redirects(bool)：可选，允许重定向
-
 - timeout(int)：可选，超时时间，单位秒，默认300
-
 - priority(int)：可选，优先级，数值越大，优先级越高，默认1
-
 
 ## BaseParser
 

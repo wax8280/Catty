@@ -4,7 +4,6 @@ requests
 aiohttp
 aiodns
 cchardet
-uvloop
 async_timeout
 yarl
 multidict
@@ -12,3 +11,5 @@ asynctest
 furl
 pyyaml
 aiofiles
+flask
+aiosqlite
